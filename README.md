@@ -4,6 +4,8 @@
 
 It is designed to feel closer to Handoff/AirDrop while staying local: no cloud storage account, no VPN and no Internet-facing port.
 
+[![MX Link overview](mx-link-overview.png)](mx-link-overview.png)
+
 > **Version:** `0.1.1-alpha`
 > **Status:** public alpha — functional, but still intended for testing.
 
