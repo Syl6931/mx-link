@@ -1,0 +1,12 @@
+{
+    "KPlugin": {
+        "Id": "org.mxlink.plasmoid",
+        "Name": "MX Link",
+        "Description": "Pont entre l’iPhone et MX Linux",
+        "Icon": "smartphone",
+        "Version": "0.1",
+        "Category": "System Information"
+    },
+    "X-Plasma-API-Minimum-Version": "6.0",
+    "KPackageStructure": "Plasma/Applet"
+}
