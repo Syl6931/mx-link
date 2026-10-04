@@ -39,7 +39,9 @@ CONFIG_FILE = CONFIG_DIR / "config.json"
 DEFAULT_CONFIG = {
     "receive_dir": "",
     "open_images": True,
+    "image_opener": "default",
     "open_pdfs": True,
+    "pdf_opener": "default",
     "notifications": True,
 }
 
@@ -75,6 +77,12 @@ def load_config():
         if not isinstance(cfg[key], bool):
             cfg[key] = DEFAULT_CONFIG[key]
 
+    for key in ("image_opener", "pdf_opener"):
+        if not isinstance(cfg[key], str) or not cfg[key].strip():
+            cfg[key] = "default"
+        else:
+            cfg[key] = cfg[key].strip()
+
     return cfg
 
 
@@ -93,6 +101,13 @@ def save_config(updates):
                 if not isinstance(updates[key], bool):
                     raise ValueError(f"{key} doit être un booléen")
                 cfg[key] = updates[key]
+
+        for key in ("image_opener", "pdf_opener"):
+            if key in updates:
+                value = updates[key]
+                if not isinstance(value, str):
+                    raise ValueError(f"{key} doit être une chaîne")
+                cfg[key] = value.strip() or "default"
 
         CONFIG_DIR.mkdir(parents=True, exist_ok=True)
 
@@ -113,6 +128,195 @@ def save_config(updates):
 
 def config_value(key, default=None):
     return load_config().get(key, default)
+
+
+APPLICATION_DIRS = (
+    Path.home() / ".local/share/applications",
+    Path("/usr/local/share/applications"),
+    Path("/usr/share/applications"),
+)
+
+
+def _read_desktop_entry(path):
+    data = {}
+    in_desktop_entry = False
+
+    try:
+        for raw_line in path.read_text(
+            encoding="utf-8",
+            errors="replace",
+        ).splitlines():
+            line = raw_line.strip()
+
+            if not line or line.startswith("#"):
+                continue
+
+            if line.startswith("[") and line.endswith("]"):
+                in_desktop_entry = line == "[Desktop Entry]"
+                continue
+
+            if not in_desktop_entry or "=" not in line:
+                continue
+
+            key, value = line.split("=", 1)
+            data[key.strip()] = value.strip()
+
+    except Exception:
+        return {}
+
+    return data
+
+
+def _desktop_files():
+    seen = set()
+
+    for directory in APPLICATION_DIRS:
+        if not directory.is_dir():
+            continue
+
+        try:
+            items = sorted(directory.glob("*.desktop"))
+        except Exception:
+            continue
+
+        for path in items:
+            desktop_id = path.name
+
+            if desktop_id in seen:
+                continue
+
+            seen.add(desktop_id)
+            yield desktop_id, path
+
+
+def _desktop_path(desktop_id):
+    desktop_id = os.path.basename(desktop_id)
+
+    for directory in APPLICATION_DIRS:
+        candidate = directory / desktop_id
+
+        if candidate.is_file():
+            return candidate
+
+    return None
+
+
+def _desktop_label(desktop_id):
+    path = _desktop_path(desktop_id)
+
+    if path is None:
+        return desktop_id.removesuffix(".desktop")
+
+    data = _read_desktop_entry(path)
+
+    return (
+        data.get("Name[fr]")
+        or data.get("Name")
+        or desktop_id.removesuffix(".desktop")
+    )
+
+
+def _default_desktop_id(mime):
+    exe = shutil.which("xdg-mime")
+
+    if not exe:
+        return ""
+
+    try:
+        result = subprocess.run(
+            [exe, "query", "default", mime],
+            stdout=subprocess.PIPE,
+            stderr=subprocess.DEVNULL,
+            text=True,
+            timeout=2,
+            check=False,
+        )
+    except Exception:
+        return ""
+
+    return result.stdout.strip()
+
+
+def available_openers(kind, current="default"):
+    if kind == "image":
+        mimes = {"image/jpeg", "image/png"}
+        default_mime = "image/jpeg"
+    elif kind == "pdf":
+        mimes = {"application/pdf"}
+        default_mime = "application/pdf"
+    else:
+        return []
+
+    default_id = _default_desktop_id(default_mime)
+    default_label = _desktop_label(default_id) if default_id else ""
+
+    result = [{
+        "value": "default",
+        "label": (
+            f"Par défaut — {default_label}"
+            if default_label
+            else "Par défaut"
+        ),
+    }]
+
+    if shutil.which("gio"):
+        found = []
+
+        for desktop_id, path in _desktop_files():
+            data = _read_desktop_entry(path)
+
+            if data.get("Type", "Application") != "Application":
+                continue
+
+            if data.get("Hidden", "").lower() == "true":
+                continue
+
+            mime_values = {
+                value
+                for value in data.get("MimeType", "").split(";")
+                if value
+            }
+
+            if not (mime_values & mimes):
+                continue
+
+            label = (
+                data.get("Name[fr]")
+                or data.get("Name")
+                or desktop_id.removesuffix(".desktop")
+            )
+
+            found.append((
+                label.casefold(),
+                desktop_id,
+                {
+                    "value": f"desktop:{desktop_id}",
+                    "label": label,
+                },
+            ))
+
+        seen_values = {"default"}
+
+        for _sort_label, _desktop_id, item in sorted(found):
+            if item["value"] in seen_values:
+                continue
+
+            result.append(item)
+            seen_values.add(item["value"])
+
+    if (
+        isinstance(current, str)
+        and current
+        and current != "default"
+        and current not in {item["value"] for item in result}
+    ):
+        result.append({
+            "value": current,
+            "label": f"Configurée — {current}",
+        })
+
+    return result
+
 
 
 
@@ -617,41 +821,9 @@ def notify(message):
         )
 
 
-def open_image_gwenview(path):
-    exe = shutil.which("gwenview")
-
-    if not exe:
-        return False
-
-    try:
-        helper = os.path.expanduser(
-            "~/.local/share/mxlink/arm-maximize-gwenview.sh"
-        )
-
-        if os.path.exists(helper):
-            try:
-                subprocess.run(
-                    [helper],
-                    stdout=subprocess.DEVNULL,
-                    stderr=subprocess.DEVNULL,
-                    timeout=2,
-                )
-            except Exception:
-                pass
-
-        subprocess.Popen(
-            [exe, str(path)],
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-        return True
-    except Exception:
-        return False
-
 
 # Regroupe les images reçues à quelques instants d'intervalle :
-# un lot de photos n'ouvre Gwenview qu'une seule fois.
+# un lot de photos ne déclenche qu'une seule demande d'ouverture.
 _image_open_lock = threading.Lock()
 _image_open_timer = None
 _image_first_path = None
@@ -669,16 +841,18 @@ def _open_pending_image():
     if not path:
         return
 
-    if open_image_gwenview(path):
-        logging.info("Lot de photos ouvert dans Gwenview : %s", path)
-    elif open_local_file(path):
+    opener = config_value("image_opener", "default")
+
+    if open_local_file(path, opener):
         logging.info(
-            "Photo affichée via application par défaut : %s",
+            "Demande d'ouverture image envoyée via %s : %s",
+            opener,
             path
         )
     else:
         logging.warning(
-            "Impossible d'ouvrir automatiquement : %s",
+            "Impossible de demander l'ouverture automatique via %s : %s",
+            opener,
             path
         )
 
@@ -703,10 +877,56 @@ def schedule_image_open(path):
         _image_open_timer.start()
 
 
-def open_local_file(path):
-    exe = shutil.which("xdg-open")
+def open_local_file(path, opener="default"):
+    opener = (opener or "default").strip()
+
+    if opener.startswith("desktop:"):
+        desktop_id = opener.split(":", 1)[1]
+        desktop_path = _desktop_path(desktop_id)
+        gio = shutil.which("gio")
+
+        if desktop_path is not None and gio:
+            try:
+                subprocess.Popen(
+                    [gio, "launch", str(desktop_path), str(path)],
+                    stdout=subprocess.DEVNULL,
+                    stderr=subprocess.DEVNULL,
+                    start_new_session=True,
+                )
+                return True
+            except Exception as exc:
+                logging.warning(
+                    "Application configurée indisponible (%s), "
+                    "retour à l'application système : %s",
+                    opener,
+                    exc,
+                )
+        else:
+            logging.warning(
+                "Application configurée indisponible (%s), "
+                "retour à l'application système",
+                opener,
+            )
+
+        opener = "default"
+
+    if opener == "default":
+        exe = shutil.which("xdg-open")
+    elif os.path.isabs(opener):
+        exe = (
+            opener
+            if os.path.isfile(opener)
+            and os.access(opener, os.X_OK)
+            else None
+        )
+    else:
+        exe = shutil.which(opener)
+
     if not exe:
-        return False
+        exe = shutil.which("xdg-open")
+
+        if not exe:
+            return False
 
     try:
         subprocess.Popen(
@@ -1231,6 +1451,36 @@ class Handler(BaseHTTPRequestHandler):
 
             return
 
+        if self.path == "/openers":
+            cfg = load_config()
+
+            body = json.dumps(
+                {
+                    "images": available_openers(
+                        "image",
+                        cfg.get("image_opener", "default"),
+                    ),
+                    "pdfs": available_openers(
+                        "pdf",
+                        cfg.get("pdf_opener", "default"),
+                    ),
+                },
+                ensure_ascii=False,
+            ).encode("utf-8")
+
+            self.send_response(200)
+            self.send_header(
+                "Content-Type",
+                "application/json; charset=utf-8",
+            )
+            self.send_header(
+                "Content-Length",
+                str(len(body)),
+            )
+            self.end_headers()
+            self.wfile.write(body)
+            return
+
         if self.path == "/config":
             cfg = load_config()
             cfg["receive_dir_resolved"] = str(download_dir())
@@ -1529,11 +1779,18 @@ class Handler(BaseHTTPRequestHandler):
                 notify(f"PDF reçu : {path.name}")
 
                 if config_value("open_pdfs", True):
-                    if open_local_file(path):
-                        logging.info("PDF ouvert : %s", path)
+                    opener = config_value("pdf_opener", "default")
+
+                    if open_local_file(path, opener):
+                        logging.info(
+                            "Demande d'ouverture PDF envoyée via %s : %s",
+                            opener,
+                            path
+                        )
                     else:
                         logging.warning(
-                            "Impossible d'ouvrir automatiquement : %s",
+                            "Impossible de demander l'ouverture PDF via %s : %s",
+                            opener,
                             path
                         )
                 else:

@@ -36,11 +36,16 @@ PlasmoidItem {
         StandardPaths.writableLocation(
             StandardPaths.DownloadLocation
         ) + "/MX Link"
-
     property bool configOpenImages: true
+    property string configImageOpener: "default"
     property bool configOpenPdfs: true
+    property string configPdfOpener: "default"
     property bool configNotifications: true
 
+    property var imageOpenerLabels: ["Par défaut"]
+    property var imageOpenerValues: ["default"]
+    property var pdfOpenerLabels: ["Par défaut"]
+    property var pdfOpenerValues: ["default"]
     property string configMessage: ""
 
     toolTipMainText: "MX Link"
@@ -325,10 +330,22 @@ PlasmoidItem {
                 root.configOpenPdfs =
                     data.open_pdfs !== false
 
+                root.configImageOpener =
+                    data.image_opener || "default"
+
+                root.configPdfOpener =
+                    data.pdf_opener || "default"
+
                 root.configNotifications =
                     data.notifications !== false
 
                 root.configLoaded = true
+
+                if (
+                    root.imageOpenerLabels.length <= 1
+                    && root.pdfOpenerLabels.length <= 1
+                )
+                    root.loadOpeners()
 
             } catch (e) {
                 root.configMessage =
@@ -339,6 +356,83 @@ PlasmoidItem {
         xhr.open(
             "GET",
             "http://127.0.0.1:8765/config"
+        )
+
+        xhr.send()
+    }
+
+    function openerIndex(values, value) {
+        for (var i = 0; i < values.length; ++i) {
+            if (values[i] === value)
+                return i
+        }
+
+        return 0
+    }
+
+    function syncOpenerSelections() {
+        imageOpenerCombo.currentIndex =
+            openerIndex(
+                imageOpenerValues,
+                configImageOpener
+            )
+
+        pdfOpenerCombo.currentIndex =
+            openerIndex(
+                pdfOpenerValues,
+                configPdfOpener
+            )
+    }
+
+    function loadOpeners() {
+        var xhr = new XMLHttpRequest()
+
+        xhr.onreadystatechange = function() {
+            if (
+                xhr.readyState
+                !== XMLHttpRequest.DONE
+            )
+                return
+
+            if (xhr.status !== 200)
+                return
+
+            try {
+                var data =
+                    JSON.parse(xhr.responseText)
+
+                var imageLabels = []
+                var imageValues = []
+                var pdfLabels = []
+                var pdfValues = []
+
+                var images = data.images || []
+                var pdfs = data.pdfs || []
+
+                for (var i = 0; i < images.length; ++i) {
+                    imageLabels.push(images[i].label)
+                    imageValues.push(images[i].value)
+                }
+
+                for (var j = 0; j < pdfs.length; ++j) {
+                    pdfLabels.push(pdfs[j].label)
+                    pdfValues.push(pdfs[j].value)
+                }
+
+                root.imageOpenerLabels = imageLabels
+                root.imageOpenerValues = imageValues
+                root.pdfOpenerLabels = pdfLabels
+                root.pdfOpenerValues = pdfValues
+
+                root.syncOpenerSelections()
+
+            } catch (e) {
+            }
+        }
+
+        xhr.open(
+            "GET",
+            "http://127.0.0.1:8765/openers"
         )
 
         xhr.send()
@@ -379,8 +473,16 @@ PlasmoidItem {
                 root.configOpenPdfs =
                     data.open_pdfs !== false
 
+                root.configImageOpener =
+                    data.image_opener || "default"
+
+                root.configPdfOpener =
+                    data.pdf_opener || "default"
+
                 root.configNotifications =
                     data.notifications !== false
+
+                root.syncOpenerSelections()
 
                 root.configMessage =
                     "Enregistré"
@@ -493,7 +595,7 @@ PlasmoidItem {
 
         implicitHeight:
             root.settingsVisible
-            ? Kirigami.Units.gridUnit * 25
+            ? Kirigami.Units.gridUnit * 29
             : Kirigami.Units.gridUnit * 16
 
         Layout.preferredWidth:
@@ -708,39 +810,101 @@ PlasmoidItem {
                     Kirigami.Units.largeSpacing
 
                 PlasmaComponents.Label {
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     text: "Réception"
                     font.bold: true
                 }
 
-                PlasmaComponents.CheckBox {
-                    text:
-                        "Ouvrir automatiquement les photos"
+                                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
 
-                    checked:
-                        root.configOpenImages
+                    PlasmaComponents.CheckBox {
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        Layout.fillWidth: true
+                        text: "Ouvrir les photos"
+                        checked:
+                            root.configOpenImages
 
-                    onClicked:
-                        root.updateConfig({
-                            "open_images":
-                                checked
-                        })
+                        onClicked:
+                            root.updateConfig({
+                                "open_images":
+                                    checked
+                            })
+                    }
+
+                    PlasmaComponents.ComboBox {
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        id: imageOpenerCombo
+                        Layout.preferredWidth:
+                            Kirigami.Units.gridUnit * 11
+
+                        enabled:
+                            root.configOpenImages
+
+                        model:
+                            root.imageOpenerLabels
+
+                        onActivated: function(index) {
+                            if (
+                                index >= 0
+                                && index < root.imageOpenerValues.length
+                            ) {
+                                root.updateConfig({
+                                    "image_opener":
+                                        root.imageOpenerValues[index]
+                                })
+                            }
+                        }
+                    }
                 }
 
-                PlasmaComponents.CheckBox {
-                    text:
-                        "Ouvrir automatiquement les PDF"
+                RowLayout {
+                    Layout.fillWidth: true
+                    spacing: Kirigami.Units.smallSpacing
 
-                    checked:
-                        root.configOpenPdfs
+                    PlasmaComponents.CheckBox {
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        Layout.fillWidth: true
+                        text: "Ouvrir les PDF"
+                        checked:
+                            root.configOpenPdfs
 
-                    onClicked:
-                        root.updateConfig({
-                            "open_pdfs":
-                                checked
-                        })
+                        onClicked:
+                            root.updateConfig({
+                                "open_pdfs":
+                                    checked
+                            })
+                    }
+
+                    PlasmaComponents.ComboBox {
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                        id: pdfOpenerCombo
+                        Layout.preferredWidth:
+                            Kirigami.Units.gridUnit * 11
+
+                        enabled:
+                            root.configOpenPdfs
+
+                        model:
+                            root.pdfOpenerLabels
+
+                        onActivated: function(index) {
+                            if (
+                                index >= 0
+                                && index < root.pdfOpenerValues.length
+                            ) {
+                                root.updateConfig({
+                                    "pdf_opener":
+                                        root.pdfOpenerValues[index]
+                                })
+                            }
+                        }
+                    }
                 }
 
-                PlasmaComponents.CheckBox {
+PlasmaComponents.CheckBox {
+    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     text:
                         "Afficher les notifications"
 
@@ -755,6 +919,7 @@ PlasmoidItem {
                 }
 
                 PlasmaComponents.Label {
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     text:
                         "Dossier de réception"
 
@@ -762,6 +927,7 @@ PlasmoidItem {
                 }
 
                 PlasmaComponents.TextField {
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     Layout.fillWidth: true
 
                     text:
@@ -779,6 +945,7 @@ PlasmoidItem {
                 }
 
                 PlasmaComponents.Label {
+                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                     Layout.fillWidth: true
 
                     text:
@@ -798,6 +965,7 @@ PlasmoidItem {
                     Layout.fillWidth: true
 
                     PlasmaComponents.Button {
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         text:
                             "Enregistrer"
 
@@ -809,6 +977,7 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.Button {
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         text:
                             "Dossier par défaut"
 
@@ -826,6 +995,7 @@ PlasmoidItem {
                     }
 
                     PlasmaComponents.Label {
+                        font.pixelSize: Kirigami.Theme.smallFont.pixelSize
                         text:
                             root.configMessage
 

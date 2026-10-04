@@ -1,6 +1,6 @@
 # Changelog
 
-## 0.1.0-alpha — 2026-10-04
+## 0.1.1-alpha — 2026-10-04
 
 Première version alpha installable.
 
@@ -11,7 +11,7 @@ Première version alpha installable.
 - Fichiers iPhone → KDE avec conservation du nom.
 - Fichiers KDE → iPhone en streaming direct, sans ZIP temporaire.
 - Gestion des lots de fichiers.
-- Ouverture automatique des images dans Gwenview et des PDF via l'application par défaut.
+- Ouverture automatique des images et PDF via les applications système par défaut, avec possibilité de choisir une application spécifique.
 - Applet Plasma avec état, dernière activité, sens du transfert et liste des fichiers.
 - Appairage iPhone par QR code.
 - Raccourci iOS maître partagé via iCloud.

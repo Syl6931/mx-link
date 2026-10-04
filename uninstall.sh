@@ -71,6 +71,7 @@ if command -v kpackagetool6 >/dev/null 2>&1; then
         >/dev/null 2>&1 || true
 fi
 
+rm -f "$HOME/.config/autostart/mxlink-session-environment.desktop"
 rm -rf "$PLASMOID_DIR" "$APP_DIR"
 
 if [ "$PURGE" = "--purge" ]; then

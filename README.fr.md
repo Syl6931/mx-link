@@ -1,153 +1,200 @@
 # MX Link
 
-**[English](README.md) | Français**
+**MX Link est une passerelle locale iPhone ↔ KDE Plasma pour le texte, les liens, les photos, les PDF et les fichiers.**
 
-MX Link est un pont local entre **KDE Plasma** et **iPhone** pour échanger rapidement le presse-papiers et des fichiers dans les deux sens.
+L’objectif est de retrouver une expérience proche de Handoff/AirDrop tout en restant local : pas de stockage cloud, pas de VPN et pas de port exposé sur Internet.
 
-> **Statut :** `0.1.0-alpha` — première version publique destinée aux tests.
+> **Version :** `0.1.1-alpha`
+> **Statut :** alpha publique — fonctionnelle, mais encore destinée aux tests.
 
-## Fonctionnalités
+## Configuration visée
 
-- Texte et URL iPhone → PC
-- Texte et URL PC → iPhone
-- Un ou plusieurs fichiers iPhone → PC
-- Un ou plusieurs fichiers PC → iPhone
-- Lots de fichiers envoyés en streaming direct, sans ZIP intermédiaire
-- Ouverture automatique des images reçues dans Gwenview
-- Ouverture automatique des PDF reçus avec l’application par défaut
-- Applet Plasma indiquant la disponibilité et la dernière activité
-- Affichage du sens du transfert, du nombre de fichiers, du volume et des noms
-- Appairage de l’iPhone par QR code
-- Découverte locale via mDNS (`hostname.local`)
-- Aucun certificat HTTPS à installer sur iOS
+Cette alpha cible actuellement :
 
-## Plateforme ciblée
+- KDE Plasma
+- MX Linux / distributions basées sur Debian
+- un iPhone avec l’app Raccourcis d’Apple
+- les deux appareils sur le même réseau local
 
-Cette première alpha cible :
+D’autres distributions peuvent fonctionner, mais l’installateur utilise actuellement les noms de paquets Debian et `dpkg`.
 
-- MX Linux / systèmes basés sur Debian
-- KDE Plasma 6
-- iPhone / iOS avec l’app Raccourcis d’Apple
-- Les deux appareils connectés au même réseau local de confiance
+## Ce que fait MX Link
 
-D’autres distributions Linux pourront être prises en charge plus tard, mais l’installateur ne les cible pas encore.
+### iPhone → Linux
 
-## Installation
+Depuis la feuille de partage iOS, lancez **MX Link** pour envoyer :
 
-Décompressez l’archive de la release puis lancez :
+- du texte → copié dans le presse-papiers KDE
+- une URL → ouverte dans le navigateur par défaut
+- une ou plusieurs photos → enregistrées localement, avec ouverture facultative
+- un PDF → enregistré localement, avec ouverture facultative
+- un autre fichier → enregistré localement
+
+### Linux → iPhone
+
+Sur Linux, copiez du texte ou un ou plusieurs fichiers dans KDE, puis lancez le raccourci **MX Link** sur l’iPhone.
+
+Pour les fichiers, le raccourci propose **Enregistrer dans Fichiers** ou **Partager…**.
+
+# Installation
+
+## 1. Télécharger
+
+Téléchargez :
+
+- `MX-Link-0.1.1-alpha.tar.gz`
+- `MX-Link-0.1.1-alpha.tar.gz.sha256`
+
+Vérification facultative mais recommandée :
+
+```bash
+sha256sum -c MX-Link-0.1.1-alpha.tar.gz.sha256
+```
+
+## 2. Extraire
+
+```bash
+tar -xzf MX-Link-0.1.1-alpha.tar.gz
+cd MX-Link-0.1.1-alpha
+```
+
+## 3. Contrôler le paquet
 
 ```bash
 bash install.sh --check
-bash install.sh --install
 ```
 
-L’installateur :
+Cette commande n’installe rien.
 
-1. vérifie et installe les dépendances nécessaires ;
-2. installe le daemon local MX Link ;
-3. installe le gateway HTTP accessible sur le réseau local ;
-4. génère un jeton d’appairage aléatoire ;
-5. installe l’applet Plasma ;
-6. ajoute MX Link au panneau Plasma supérieur lorsqu’il existe ;
-7. installe et active les services systemd utilisateur ;
-8. active la découverte mDNS locale via Avahi ;
-9. limite le port TCP `8767` au réseau local via UFW ;
-10. génère le QR code d’appairage propre à la machine.
+## 4. Installer
 
-## Appairer un iPhone
+```bash
+bash install.sh
+```
 
-Ouvrez l’applet Plasma **MX Link** et choisissez **Appairer un iPhone**.
+L’installateur configure le daemon, la passerelle HTTP locale, l’applet Plasma, la page d’appairage, la règle de pare-feu, la résolution du nom en `.local` et le hook de session Plasma.
 
-Puis, sur l’iPhone :
+## 5. Appairer l’iPhone
 
-1. scannez le QR code ;
-2. touchez **Installer MX Link** ;
-3. ajoutez le raccourci ;
-4. revenez à la page d’installation ;
-5. touchez **Appairer cet iPhone**.
+Récupérez le nom du poste Linux :
 
-Le raccourci iOS partagé ne contient ni adresse IP personnelle ni jeton d’appairage. L’appairage enregistre localement sur l’iPhone la configuration de la machine.
+```bash
+hostname -s
+```
 
-Pour un accès quotidien plus rapide, vous pouvez ajouter **MX Link** comme grand contrôle Raccourcis dans le Centre de contrôle iOS.
+Sur l’iPhone, connecté au même Wi‑Fi/réseau local, ouvrez :
 
-## Utilisation
+```text
+http://NOM-DU-PC.local:8767/setup
+```
 
-### PC → iPhone
+Puis :
 
-**Presse-papiers**
+1. **Installer MX Link** — installe le raccourci officiel depuis iCloud.
+2. **Appairer cet iPhone** — transmet au raccourci les paramètres locaux de connexion.
 
-1. Copiez un texte ou une URL sous KDE.
-2. Lancez **MX Link** sur l’iPhone.
-3. Collez normalement dans iOS.
+Aucun certificat TLS ni profil de configuration iOS n’est nécessaire.
 
-**Fichiers**
+# Utilisation quotidienne
 
-1. Sélectionnez un ou plusieurs fichiers dans Dolphin.
-2. Copiez-les avec `Ctrl+C`.
-3. Lancez **MX Link** sur l’iPhone.
-4. Choisissez **Enregistrer dans Fichiers** ou **Partager…**.
+## iPhone → Linux
 
-MX Link ne lit le presse-papiers KDE que lorsque l’iPhone le demande. Copier ou trier des fichiers sur le PC ne déclenche donc aucun transfert en arrière-plan.
+Depuis la feuille de partage iOS, lancez **MX Link**.
 
-### iPhone → PC
-
-Utilisez la feuille de partage iOS et choisissez **MX Link**.
-
-Par défaut, les fichiers reçus sont enregistrés dans :
+Les fichiers reçus sont enregistrés par défaut dans le dossier `MX Link` situé sous Téléchargements, par exemple :
 
 ```text
 ~/Téléchargements/MX Link
 ```
 
-Le dossier de réception et les ouvertures automatiques peuvent être réglés dans l’applet Plasma.
+## Linux → iPhone
 
-## Architecture
+Copiez du texte ou un ou plusieurs fichiers dans KDE, puis lancez le raccourci **MX Link** sur l’iPhone.
 
-MX Link utilise deux services locaux :
+# Applet Plasma
 
-- `127.0.0.1:8765` — daemon principal, accessible uniquement en local
-- `0.0.0.0:8767` — gateway réseau local, protégé par le jeton d’appairage
+L’applet affiche l’état, le dernier transfert, le sens du transfert, les noms récents, l’appairage et les réglages.
 
-L’iPhone rejoint la machine grâce à son nom mDNS, par exemple :
+Dans **Réglages → Réception**, vous pouvez configurer :
+
+- l’ouverture automatique des photos
+- l’ouverture automatique des PDF
+- les notifications
+- le dossier de réception
+- l’application utilisée pour les photos
+- l’application utilisée pour les PDF
+
+Par défaut, MX Link suit les associations de fichiers du système, par exemple :
 
 ```text
-http://monpc.local:8767
+Photos : Par défaut — qimgv
+PDF    : Par défaut — Okular
 ```
 
-MX Link ne dépend donc pas d’une adresse IP attribuée par DHCP.
+qimgv et Okular **ne sont pas des dépendances**. Ce sont seulement des exemples d’applications définies par défaut sur le système.
 
-## Sécurité
+Vous pouvez choisir explicitement une autre application compatible installée. Si elle disparaît, MX Link revient à l’application système par défaut.
 
-MX Link est conçu pour un **réseau local de confiance**.
+# Option pratique : Centre de contrôle
 
-Le gateway LAN exige un jeton aléatoire généré lors de l’installation, mais le trafic entre l’iPhone et le PC utilise HTTP et n’est donc **pas chiffré**.
+Vous pouvez ajouter le raccourci **MX Link** au Centre de contrôle d’iOS pour y accéder plus rapidement.
 
-N’utilisez pas MX Link sur un réseau local non fiable.
+# Réseau et confidentialité
 
-Voir [SECURITY.md](SECURITY.md) pour plus de détails.
+Le daemon principal n’écoute que sur :
 
-## Désinstallation
+```text
+127.0.0.1:8765
+```
+
+La passerelle LAN utilise le port :
+
+```text
+8767
+```
+
+et exige le jeton d’appairage.
+
+MX Link ne nécessite ni stockage cloud, ni VPN, ni port exposé sur Internet, ni certificat TLS, ni profil de configuration iOS.
+
+Le lien iCloud sert à installer le raccourci. Les transferts ordinaires se font ensuite localement.
+
+# Après un redémarrage
+
+MX Link fonctionne comme service utilisateur et doit démarrer automatiquement. Un hook de session Plasma réinjecte l’environnement graphique pour que les fichiers reçus puissent toujours être ouverts par les applications du bureau après connexion.
+
+# Diagnostic
+
+```bash
+systemctl --user status mxlink.service
+systemctl --user status mxlink-http.service
+tail -n 80 ~/.local/state/mxlink/mxlink.log
+```
+
+# Désinstallation
+
+Conserver la configuration et le jeton :
 
 ```bash
 bash uninstall.sh
 ```
 
-Pour supprimer également la configuration et le jeton :
+Supprimer aussi la configuration et le jeton :
 
 ```bash
 bash uninstall.sh --purge
 ```
 
-Les fichiers déjà reçus dans `Téléchargements/MX Link` sont conservés.
+Les fichiers déjà reçus ne sont pas supprimés.
 
-## Limites connues de cette alpha
+# Test alpha
 
-- L’installateur cible actuellement Debian / MX Linux.
-- La partie iPhone dépend de l’app Raccourcis d’Apple.
-- Le transport HTTP suppose un réseau local de confiance.
-- La gestion de plusieurs iPhone ou plusieurs PC reste basique.
-- La logique de mise à jour évoluera avant une version stable.
+Les retours les plus utiles concernent l’installation, l’appairage, la fiabilité des transferts, le comportement après redémarrage, les différentes associations d’applications KDE et les étapes ambiguës.
 
-## Licence
+Pour signaler un problème, indiquez si possible la distribution/version Linux, la version de KDE Plasma, la version d’iOS, ce que vous envoyiez, l’étape exacte en échec et la sortie des commandes de diagnostic.
 
-MIT — voir [LICENSE](LICENSE).
+Avant de publier des journaux, retirez les noms de fichiers personnels et toute information sensible.
+
+## Documentation anglaise
+
+Voir **[README.md](README.md)**.

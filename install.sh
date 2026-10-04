@@ -84,10 +84,6 @@ check_environment() {
         && say "✓ qrencode" \
         || say "• qrencode sera installé"
 
-    command -v gwenview >/dev/null 2>&1 \
-        && say "✓ Gwenview" \
-        || say "• Gwenview sera installé"
-
     say "✓ nom mDNS prévu : $(hostname -s).local"
 }
 
@@ -119,7 +115,7 @@ PACKAGES=(
     qrencode
     xdg-user-dirs
     libnotify-bin
-    gwenview
+
     avahi-daemon
     libnss-mdns
     ufw
@@ -169,10 +165,21 @@ chmod 700 \
     "$APP_DIR/mxlink.py" \
     "$APP_DIR/mxlink-http-gateway.py"
 
-[ ! -f "$APP_DIR/arm-maximize-gwenview.sh" ] \
-    || chmod 700 "$APP_DIR/arm-maximize-gwenview.sh"
-
 say "✓ daemon et gateway"
+
+[ ! -f "$APP_DIR/mxlink-session-environment.sh" ] || chmod 700 "$APP_DIR/mxlink-session-environment.sh"
+
+mkdir -p "$HOME/.config/autostart"
+cat > "$HOME/.config/autostart/mxlink-session-environment.desktop" <<EOF
+[Desktop Entry]
+Type=Application
+Name=MX Link session environment
+Comment=Expose la session graphique Plasma aux services MX Link
+Exec=$APP_DIR/mxlink-session-environment.sh
+OnlyShowIn=KDE;
+X-KDE-autostart-after=panel
+NoDisplay=true
+EOF
 
 mkdir -p "$CONFIG_DIR"
 
@@ -181,7 +188,9 @@ if [ ! -f "$CONFIG_DIR/config.json" ]; then
 {
   "receive_dir": "",
   "open_images": true,
+  "image_opener": "default",
   "open_pdfs": true,
+  "pdf_opener": "default",
   "notifications": true
 }
 JSON

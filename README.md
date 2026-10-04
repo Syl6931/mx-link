@@ -1,153 +1,206 @@
 # MX Link
 
-**English | [Français](README.fr.md)**
+**MX Link is a local iPhone ↔ KDE Plasma bridge for text, links, photos, PDFs and files.**
 
-MX Link is a local bridge between **KDE Plasma** and **iPhone** for quickly exchanging clipboard content and files in both directions.
+It is designed to feel closer to Handoff/AirDrop while staying local: no cloud storage account, no VPN and no Internet-facing port.
 
-> **Status:** `0.1.0-alpha` — early public testing release.
+> **Version:** `0.1.1-alpha`
+> **Status:** public alpha — functional, but still intended for testing.
 
-## Features
+## Supported setup
 
-- Text and URLs from iPhone → PC
-- Text and URLs from PC → iPhone
-- One or multiple files from iPhone → PC
-- One or multiple files from PC → iPhone
-- Direct streaming for file batches, without creating an intermediate ZIP archive
-- Automatic opening of received images in Gwenview
-- Automatic opening of received PDFs with the default application
-- Plasma applet showing availability and the latest transfer activity
-- Transfer direction, file count, total size and file names in the applet
-- iPhone pairing through a QR code
-- Local discovery through mDNS (`hostname.local`)
-- No HTTPS certificate to install on iOS
+This alpha currently targets:
 
-## Target platform
+- KDE Plasma
+- MX Linux / Debian-based distributions
+- iPhone with Apple Shortcuts
+- both devices on the same local network
 
-This first alpha targets:
+Other distributions may work, but the installer currently uses Debian package names and `dpkg`.
 
-- MX Linux / Debian-based systems
-- KDE Plasma 6
-- iPhone / iOS with Apple Shortcuts
-- Both devices connected to the same trusted local network
+## What MX Link does
 
-Other Linux distributions may work later, but are not yet supported by the installer.
+### iPhone → Linux
 
-## Installation
+From the iOS share sheet, run **MX Link** to send:
 
-Extract the release archive, then run:
+- text → copied to the KDE clipboard
+- a URL → opened in the default browser
+- one or more photos → saved locally, optionally opened
+- a PDF → saved locally, optionally opened
+- another file → saved locally
+
+### Linux → iPhone
+
+On Linux, copy text or one or more files in KDE, then run the **MX Link** Shortcut on the iPhone.
+
+For files, the Shortcut offers **Save to Files** or **Share…**.
+
+# Installation
+
+## 1. Download
+
+Download:
+
+- `MX-Link-0.1.1-alpha.tar.gz`
+- `MX-Link-0.1.1-alpha.tar.gz.sha256`
+
+Optional but recommended:
+
+```bash
+sha256sum -c MX-Link-0.1.1-alpha.tar.gz.sha256
+```
+
+## 2. Extract
+
+```bash
+tar -xzf MX-Link-0.1.1-alpha.tar.gz
+cd MX-Link-0.1.1-alpha
+```
+
+## 3. Check the package
 
 ```bash
 bash install.sh --check
-bash install.sh --install
 ```
 
-The installer:
+This does not install anything.
 
-1. checks and installs required dependencies;
-2. installs the local MX Link daemon;
-3. installs the LAN HTTP gateway;
-4. generates a random pairing token;
-5. installs the Plasma applet;
-6. adds MX Link to the top Plasma panel when available;
-7. installs and enables user systemd services;
-8. enables local mDNS discovery through Avahi;
-9. restricts TCP port `8767` to the local network through UFW;
-10. generates the machine-specific pairing QR code.
+## 4. Install
 
-## Pair an iPhone
+```bash
+bash install.sh
+```
 
-Open the **MX Link** Plasma applet and choose **Pair an iPhone**.
+The installer sets up the daemon, local HTTP gateway, Plasma applet, pairing page, firewall rule, `.local` name resolution and Plasma session hook.
 
-Then, on the iPhone:
+## 5. Pair the iPhone
 
-1. scan the QR code;
-2. tap **Install MX Link**;
-3. add the Shortcut;
-4. return to the setup page;
-5. tap **Pair this iPhone**.
+Find the Linux hostname:
 
-The shared iOS Shortcut does not contain a personal IP address or pairing token. Pairing stores the local machine configuration on the iPhone.
+```bash
+hostname -s
+```
 
-For faster daily access, you can add **MX Link** as a large Shortcut control in the iOS Control Center.
+On the iPhone, connected to the same Wi‑Fi/LAN, open:
 
-## Usage
+```text
+http://HOSTNAME.local:8767/setup
+```
 
-### PC → iPhone
+Then:
 
-**Clipboard**
+1. **Install MX Link** — installs the official Shortcut from iCloud.
+2. **Pair this iPhone** — sends the local connection settings to the Shortcut.
 
-1. Copy text or a URL on KDE.
-2. Run **MX Link** on the iPhone.
-3. Paste normally on iOS.
+No TLS certificate or iOS configuration profile is required.
 
-**Files**
+# Everyday use
 
-1. Select one or more files in Dolphin.
-2. Copy them with `Ctrl+C`.
-3. Run **MX Link** on the iPhone.
-4. Choose **Save to Files** or **Share…**.
+## iPhone → Linux
 
-MX Link reads the current KDE clipboard only when the iPhone requests it. Copying or sorting files on the PC does not trigger background transfers.
+Use the iOS share sheet and run **MX Link**.
 
-### iPhone → PC
-
-Use the iOS Share Sheet and choose **MX Link**.
-
-Received files are stored by default in:
+Received files are stored by default under your Downloads folder in `MX Link`, for example:
 
 ```text
 ~/Downloads/MX Link
 ```
 
-The receive folder and automatic opening behavior can be changed in the Plasma applet.
-
-## Architecture
-
-MX Link uses two local services:
-
-- `127.0.0.1:8765` — main daemon, local-only
-- `0.0.0.0:8767` — LAN gateway, protected by the pairing token
-
-The iPhone connects to the machine through its mDNS name, for example:
+or a localized equivalent such as:
 
 ```text
-http://mycomputer.local:8767
+~/Téléchargements/MX Link
 ```
 
-This avoids depending on a DHCP-assigned IP address.
+## Linux → iPhone
 
-## Security
+Copy text or one or more files in KDE, then run the **MX Link** Shortcut on the iPhone.
 
-MX Link is designed for a **trusted local network**.
+# Plasma applet
 
-The LAN gateway requires a randomly generated pairing token, but traffic between the iPhone and the PC uses plain HTTP and is **not encrypted**.
+The applet shows status, latest transfer, direction, recent filenames, pairing information and settings.
 
-Do not use MX Link on an untrusted local network.
+In **Settings → Receive** you can configure:
 
-See [SECURITY.md](SECURITY.md) for details.
+- automatic photo opening
+- automatic PDF opening
+- notifications
+- receive folder
+- photo application
+- PDF application
 
-## Uninstall
+By default MX Link follows the system file associations, for example:
+
+```text
+Photos: Default — qimgv
+PDF:    Default — Okular
+```
+
+qimgv and Okular are **not dependencies**. They are only examples of current system defaults.
+
+You can explicitly choose another compatible installed application. If that application disappears, MX Link falls back to the system default.
+
+# Optional: iPhone Control Center
+
+You can add the **MX Link** Shortcut to iOS Control Center for faster access.
+
+# Network and privacy
+
+The backend daemon listens only on:
+
+```text
+127.0.0.1:8765
+```
+
+The LAN gateway uses port:
+
+```text
+8767
+```
+
+and requires the pairing token.
+
+MX Link does not require cloud storage, a VPN, an Internet-facing port, a TLS certificate or an iOS configuration profile.
+
+The iCloud link is used to install the Shortcut. Normal transfers happen locally.
+
+# After a reboot
+
+MX Link runs as a user service and should start automatically. A Plasma session hook refreshes the graphical environment so received files can still be opened by desktop applications after login.
+
+# Diagnostics
+
+```bash
+systemctl --user status mxlink.service
+systemctl --user status mxlink-http.service
+tail -n 80 ~/.local/state/mxlink/mxlink.log
+```
+
+# Uninstall
+
+Keep configuration and pairing token:
 
 ```bash
 bash uninstall.sh
 ```
 
-To also delete configuration and the pairing token:
+Remove MX Link and configuration/token:
 
 ```bash
 bash uninstall.sh --purge
 ```
 
-Files previously received in `Downloads/MX Link` are preserved.
+Received files are not deleted.
 
-## Known alpha limitations
+# Alpha testing
 
-- Installer currently targets Debian / MX Linux.
-- The iPhone side depends on Apple Shortcuts.
-- HTTP transport assumes a trusted LAN.
-- Multi-device and multi-PC pairing are still basic.
-- Upgrade behavior will evolve before a stable release.
+Useful feedback includes installation, pairing, transfer reliability, behavior after reboot, different KDE file associations and unclear instructions.
 
-## License
+When reporting a problem, please include Linux distribution/version, KDE Plasma version, iOS version, what you were sending, the exact failing step and relevant diagnostic output.
 
-MIT — see [LICENSE](LICENSE).
+Remove personal filenames or sensitive information before posting logs publicly.
+
+## French documentation
+
+See **[README.fr.md](README.fr.md)**.
