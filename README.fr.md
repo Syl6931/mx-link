@@ -4,6 +4,8 @@
 
 L’objectif est de retrouver une expérience proche de Handoff/AirDrop tout en restant local : pas de stockage cloud, pas de VPN et pas de port exposé sur Internet.
 
+[![Vue d’ensemble de MX Link](mx-link-overview.png)](mx-link-overview.png)
+
 > **Version :** `0.1.1-alpha`
 > **Statut :** alpha publique — fonctionnelle, mais encore destinée aux tests.
 
