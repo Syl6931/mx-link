@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.1.2-alpha — 2026-10-09
+
+- Export des images présentes uniquement sous forme bitmap dans le presse-papiers Wayland (PNG, JPEG, BMP, WebP, TIFF) vers l’iPhone via le raccourci existant.
+- Capture en PNG privé, sans modifier le presse-papiers ni les transferts classiques (texte, URL, fichiers).
+- Ajout des dépendances `wl-clipboard` et `imagemagick` dans l’installateur.
+- Nettoyage des images temporaires après expiration et tests de non-régression.
+
+
 ## 0.1.1-alpha — 2026-10-04
 
 Première version alpha installable.

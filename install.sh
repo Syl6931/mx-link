@@ -31,6 +31,7 @@ check_payload() {
 
     for f in \
         "$SRC_DIR/mxlink.py" \
+        "$SRC_DIR/mxlink_bitmap.py" \
         "$SRC_DIR/mxlink-http-gateway.py" \
         "$PLASMOID_SRC/metadata.json" \
         "$PLASMOID_SRC/contents/ui/main.qml"
@@ -40,6 +41,7 @@ check_payload() {
 
     python3 -m py_compile \
         "$SRC_DIR/mxlink.py" \
+        "$SRC_DIR/mxlink_bitmap.py" \
         "$SRC_DIR/mxlink-http-gateway.py"
     say "✓ syntaxe Python"
 
@@ -115,6 +117,8 @@ PACKAGES=(
     qrencode
     xdg-user-dirs
     libnotify-bin
+    wl-clipboard
+    imagemagick
 
     avahi-daemon
     libnss-mdns

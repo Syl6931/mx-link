@@ -6,7 +6,7 @@ L’objectif est de retrouver une expérience proche de Handoff/AirDrop tout en 
 
 [![Vue d’ensemble de MX Link](mx-link-overview.png)](mx-link-overview.png)
 
-> **Version :** `0.1.1-alpha`
+> **Version :** `0.1.2-alpha`
 > **Statut :** alpha publique — fonctionnelle, mais encore destinée aux tests.
 
 ## Configuration visée
@@ -36,7 +36,27 @@ Depuis la feuille de partage iOS, lancez **MX Link** pour envoyer :
 
 Sur Linux, copiez du texte ou un ou plusieurs fichiers dans KDE, puis lancez le raccourci **MX Link** sur l’iPhone.
 
+Vous pouvez aussi **copier une image directement** depuis Chrome, une application graphique ou un outil de capture : MX Link détecte l’image bitmap du presse-papiers Wayland et la transmet en PNG, sans modifier le raccourci iOS.
+
 Pour les fichiers, le raccourci propose **Enregistrer dans Fichiers** ou **Partager…**.
+
+
+**Dépendances bitmap :** `wl-clipboard` (capture Wayland) et `imagemagick` (conversion non-PNG) sont installés par `install.sh` si nécessaire. Les PNG temporaires sont stockés sous `~/.cache/mxlink/clipboard-bitmaps/` (permissions privées) et nettoyés lors des requêtes ultérieures, après expiration. Les fichiers copiés depuis Dolphin restent traités normalement.
+
+## Vérifier le correctif bitmap
+
+Pour vérifier le correctif sans modifier le presse-papiers réel :
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+Pour régénérer puis contrôler les sommes SHA-256 de la distribution (sans inclure `.git`) :
+
+```bash
+python3 scripts/update_manifest.py
+sha256sum -c MANIFEST.sha256
+```
 
 # Installation
 
@@ -44,20 +64,20 @@ Pour les fichiers, le raccourci propose **Enregistrer dans Fichiers** ou **Parta
 
 Téléchargez :
 
-- `MX-Link-0.1.1-alpha.tar.gz`
-- `MX-Link-0.1.1-alpha.tar.gz.sha256`
+- `MX-Link-0.1.2-alpha.tar.gz`
+- `MX-Link-0.1.2-alpha.tar.gz.sha256`
 
 Vérification facultative mais recommandée :
 
 ```bash
-sha256sum -c MX-Link-0.1.1-alpha.tar.gz.sha256
+sha256sum -c MX-Link-0.1.2-alpha.tar.gz.sha256
 ```
 
 ## 2. Extraire
 
 ```bash
-tar -xzf MX-Link-0.1.1-alpha.tar.gz
-cd MX-Link-0.1.1-alpha
+tar -xzf MX-Link-0.1.2-alpha.tar.gz
+cd MX-Link-0.1.2-alpha
 ```
 
 ## 3. Contrôler le paquet

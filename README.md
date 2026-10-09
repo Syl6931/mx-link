@@ -6,7 +6,7 @@ It is designed to feel closer to Handoff/AirDrop while staying local: no cloud s
 
 [![MX Link overview](mx-link-overview.png)](mx-link-overview.png)
 
-> **Version:** `0.1.1-alpha`
+> **Version:** `0.1.2-alpha`
 > **Status:** public alpha — functional, but still intended for testing.
 
 ## Supported setup
@@ -36,7 +36,27 @@ From the iOS share sheet, run **MX Link** to send:
 
 On Linux, copy text or one or more files in KDE, then run the **MX Link** Shortcut on the iPhone.
 
+You can also **copy an image directly** from Chrome, a graphics app or a screenshot tool: MX Link detects Wayland clipboard bitmap data and transfers it as PNG, without changing the iOS Shortcut.
+
 For files, the Shortcut offers **Save to Files** or **Share…**.
+
+
+**Bitmap dependencies:** `wl-clipboard` (Wayland clipboard access) and `imagemagick` (non-PNG conversion) are installed by `install.sh` if needed. Temporary PNG files are kept under `~/.cache/mxlink/clipboard-bitmaps/` (private permissions) and removed by later requests after expiry. Files copied in Dolphin still work as before.
+
+## Verify the bitmap fix
+
+Run bitmap regression tests without touching your real clipboard:
+
+```bash
+python3 -m unittest discover -s tests -v
+```
+
+To rebuild and check distribution SHA-256 checksums (excluding `.git`):
+
+```bash
+python3 scripts/update_manifest.py
+sha256sum -c MANIFEST.sha256
+```
 
 # Installation
 
@@ -44,20 +64,20 @@ For files, the Shortcut offers **Save to Files** or **Share…**.
 
 Download:
 
-- `MX-Link-0.1.1-alpha.tar.gz`
-- `MX-Link-0.1.1-alpha.tar.gz.sha256`
+- `MX-Link-0.1.2-alpha.tar.gz`
+- `MX-Link-0.1.2-alpha.tar.gz.sha256`
 
 Optional but recommended:
 
 ```bash
-sha256sum -c MX-Link-0.1.1-alpha.tar.gz.sha256
+sha256sum -c MX-Link-0.1.2-alpha.tar.gz.sha256
 ```
 
 ## 2. Extract
 
 ```bash
-tar -xzf MX-Link-0.1.1-alpha.tar.gz
-cd MX-Link-0.1.1-alpha
+tar -xzf MX-Link-0.1.2-alpha.tar.gz
+cd MX-Link-0.1.2-alpha
 ```
 
 ## 3. Check the package

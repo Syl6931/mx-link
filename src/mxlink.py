@@ -15,6 +15,7 @@ import time
 import subprocess
 import threading
 import sys
+from mxlink_bitmap import image_mime, capture_image, clean_expired
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -625,6 +626,9 @@ def clipboard_export_type():
     if len(paths) > 1:
         return "files"
 
+    if image_mime():
+        return "file"
+
     text = read_clipboard_live()
 
     if not text:
@@ -653,21 +657,26 @@ def cleanup_clipboard_sessions():
             if now - value["created"] > CLIPBOARD_SESSION_TTL
         ]
 
-        for key in expired:
-            _clipboard_sessions.pop(key, None)
+        old_sessions = [_clipboard_sessions.pop(key) for key in expired]
+
+    clean_expired([item for session in old_sessions for item in session["items"]], now)
 
 
 def create_clipboard_session():
     cleanup_clipboard_sessions()
 
     paths = clipboard_file_paths()
-
+    bitmap = None
     if not paths:
-        return None
+        mime = image_mime()
+        if mime:
+            bitmap = capture_image(mime)
+        if bitmap is None:
+            return None
 
     session_id = secrets.token_urlsafe(18)
 
-    snapshot = []
+    snapshot = [bitmap] if bitmap else []
 
     for path in paths:
         stat = path.stat()
