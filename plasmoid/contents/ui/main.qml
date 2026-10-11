@@ -370,20 +370,6 @@ PlasmoidItem {
         return 0
     }
 
-    function syncOpenerSelections() {
-        imageOpenerCombo.currentIndex =
-            openerIndex(
-                imageOpenerValues,
-                configImageOpener
-            )
-
-        pdfOpenerCombo.currentIndex =
-            openerIndex(
-                pdfOpenerValues,
-                configPdfOpener
-            )
-    }
-
     function loadOpeners() {
         var xhr = new XMLHttpRequest()
 
@@ -423,8 +409,6 @@ PlasmoidItem {
                 root.imageOpenerValues = imageValues
                 root.pdfOpenerLabels = pdfLabels
                 root.pdfOpenerValues = pdfValues
-
-                root.syncOpenerSelections()
 
             } catch (e) {
             }
@@ -481,8 +465,6 @@ PlasmoidItem {
 
                 root.configNotifications =
                     data.notifications !== false
-
-                root.syncOpenerSelections()
 
                 root.configMessage =
                     "Enregistré"
@@ -845,6 +827,12 @@ PlasmoidItem {
                         model:
                             root.imageOpenerLabels
 
+                        currentIndex:
+                            root.openerIndex(
+                                root.imageOpenerValues,
+                                root.configImageOpener
+                            )
+
                         onActivated: function(index) {
                             if (
                                 index >= 0
@@ -888,6 +876,12 @@ PlasmoidItem {
 
                         model:
                             root.pdfOpenerLabels
+
+                        currentIndex:
+                            root.openerIndex(
+                                root.pdfOpenerValues,
+                                root.configPdfOpener
+                            )
 
                         onActivated: function(index) {
                             if (

@@ -1,5 +1,9 @@
 # Changelog
 
+## Non publié — 2026-10-11
+
+- Correction du message « Réponse invalide » après enregistrement des réglages : les sélecteurs d’applications sont désormais synchronisés par liaison déclarative QML, sans référence hors portée.
+
 ## 0.1.2-alpha — 2026-10-09
 
 - Export des images présentes uniquement sous forme bitmap dans le presse-papiers Wayland (PNG, JPEG, BMP, WebP, TIFF) vers l’iPhone via le raccourci existant.
