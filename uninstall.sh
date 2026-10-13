@@ -75,7 +75,7 @@ rm -f "$HOME/.config/autostart/mxlink-session-environment.desktop"
 rm -rf "$PLASMOID_DIR" "$APP_DIR"
 
 if [ "$PURGE" = "--purge" ]; then
-    rm -rf "$CONFIG_DIR"
+    rm -rf "$CONFIG_DIR" "$HOME/.local/state/mxlink/history.json"
     echo "✓ configuration et jeton supprimés"
 else
     echo "• configuration conservée dans $CONFIG_DIR"

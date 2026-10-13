@@ -16,6 +16,7 @@ import subprocess
 import threading
 import sys
 from mxlink_bitmap import image_mime, capture_image, clean_expired
+import mxlink_history as history
 
 HOST = "127.0.0.1"
 PORT = 8765
@@ -337,6 +338,7 @@ _batch_last_at = None
 _batch_type = None
 _batch_count = 0
 _batch_bytes = 0
+_batch_history_id = None
 
 BATCH_WINDOW_SECONDS = 2.5
 
@@ -415,6 +417,7 @@ def classify_mime(mime):
 
 
 def record_file_event(path, mime, size):
+    global _batch_history_id
     global _batch_last_at
     global _batch_type
     global _batch_count
@@ -438,6 +441,7 @@ def record_file_event(path, mime, size):
             _batch_count += 1
             _batch_bytes += size
         else:
+            _batch_history_id = secrets.token_urlsafe(12)
             _batch_type = event_type
             _batch_count = 1
             _batch_bytes = size
@@ -460,13 +464,17 @@ def record_file_event(path, mime, size):
         }
 
         state["last_direction"] = "in"
-    write_state(state)
+        write_state(state)
+        history.record("in", event_type, Path(path).name, size,
+                       paths=[path], batch_id=_batch_history_id)
 
 
 def record_simple_event(
     event_type,
     name,
-    size=0
+    size=0,
+    url=None,
+    save_history=True,
 ):
     global _batch_last_at
     global _batch_type
@@ -500,8 +508,9 @@ def record_simple_event(
         }
 
         state["last_direction"] = "in"
-    write_state(state)
-
+        write_state(state)
+        if save_history:
+            history.record("in", event_type, name, size, url=url)
 
 
 def read_clipboard_live():
@@ -724,13 +733,16 @@ def record_outbound_activity(
     size=0,
     count=1
 ,
-    names=None
+    names=None,
+    paths=None,
+    url=None,
 ):
     # Réutilise la mécanique existante pour date/type/nom/taille.
     record_simple_event(
         event_type,
         name,
-        size
+        size,
+        save_history=False,
     )
 
     state = read_state()
@@ -746,6 +758,7 @@ def record_outbound_activity(
     )
 
     write_state(state)
+    history.record("out", event_type, name, size, paths=paths, url=url)
 
     logging.info(
         "Envoyé vers iPhone : %s (%d octets, %d élément(s))",
@@ -808,7 +821,8 @@ def mark_clipboard_session_item_delivered(
                 [
                     item["name"]
                     for item in items
-                ]
+                ],
+                [item["path"] for item in items],
             )
 
     if completed is not None:
@@ -1354,7 +1368,8 @@ class Handler(BaseHTTPRequestHandler):
                     event_type,
                     "Presse-papiers",
                     len(body),
-                    1
+                    1,
+                    url=stripped if event_type == "url" else None,
                 )
 
             return
@@ -1406,6 +1421,16 @@ class Handler(BaseHTTPRequestHandler):
             )
             self.end_headers()
             self.wfile.write(body)
+            return
+
+        if path == "/history":
+            payload = json.dumps(history.history_public(), ensure_ascii=False).encode("utf-8")
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json; charset=utf-8")
+            self.send_header("Content-Length", str(len(payload)))
+            self.send_header("Cache-Control", "no-store")
+            self.end_headers()
+            self.wfile.write(payload)
             return
 
         if self.path == "/state":
@@ -1642,6 +1667,33 @@ class Handler(BaseHTTPRequestHandler):
 
         parsed = urlparse(self.path)
 
+        if parsed.path == "/history/clear":
+            history.clear()
+            self.send_text(200, "Historique effacé")
+            return
+
+        if parsed.path == "/history/open":
+            try:
+                data = json.loads(raw.decode("utf-8"))
+                if not isinstance(data, dict):
+                    raise ValueError("Invalid object")
+                event_id = data.get("id")
+                index = data.get("index")
+                if not isinstance(event_id, str) or not isinstance(index, int):
+                    raise ValueError("Invalid id/index")
+                target = history.resolve(event_id, index)
+                if target is None:
+                    self.send_text(404, "Élément indisponible")
+                elif target[0] == "file" and open_local_file(target[1]):
+                    self.send_text(200, "Fichier ouvert")
+                elif target[0] == "url" and open_url(target[1]):
+                    self.send_text(200, "Lien ouvert")
+                else:
+                    self.send_text(500, "Ouverture impossible")
+            except (ValueError, UnicodeDecodeError, json.JSONDecodeError):
+                self.send_text(400, "Requête invalide")
+            return
+
         if parsed.path == "/config":
             try:
                 updates = json.loads(
@@ -1837,7 +1889,8 @@ class Handler(BaseHTTPRequestHandler):
                 record_simple_event(
                     "url",
                     url,
-                    len(url.encode("utf-8"))
+                    len(url.encode("utf-8")),
+                    url=url,
                 )
                 notify("URL reçue depuis l’iPhone")
                 self.send_text(200, "URL ouverte sur MX")

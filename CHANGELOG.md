@@ -1,6 +1,15 @@
 # Changelog
 
-## Non publié — 2026-10-11
+## 0.1.3-alpha — 2026-10-13
+
+- Nouvelle icône symbolique représentant un ordinateur et un smartphone avec transfert bidirectionnel.
+- Historique privé local des 30 dernières opérations : sens, heure, type et éléments transférés ; fichiers et liens accessibles par clic.
+- Regroupement des envois multiples, liste dépliable des fichiers et bouton d'effacement avec confirmation.
+- Aucun contenu texte du presse-papiers conservé ; les éléments effacés ou temporaires sont indiqués comme indisponibles.
+- Historique et actions d'ouverture réservés à l'interface locale : ces routes ne sont pas transmises par la passerelle iPhone.
+- Tests automatisés de rétention, regroupement, suppression, permissions et confidentialité.
+
+## 0.1.2-alpha + correctif — 2026-10-11
 
 - Correction du message « Réponse invalide » après enregistrement des réglages : les sélecteurs d’applications sont désormais synchronisés par liaison déclarative QML, sans référence hors portée.
 

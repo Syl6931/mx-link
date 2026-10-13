@@ -6,7 +6,7 @@ L’objectif est de retrouver une expérience proche de Handoff/AirDrop tout en 
 
 [![Vue d’ensemble de MX Link](mx-link-overview.png)](mx-link-overview.png)
 
-> **Version :** `0.1.2-alpha`
+> **Version :** `0.1.3-alpha`
 > **Statut :** alpha publique — fonctionnelle, mais encore destinée aux tests.
 
 ## Configuration visée
@@ -60,27 +60,18 @@ sha256sum -c MANIFEST.sha256
 
 # Installation
 
-## 1. Télécharger
+## 1. Télécharger les dernières sources
 
-Téléchargez :
-
-- `MX-Link-0.1.2-alpha.tar.gz`
-- `MX-Link-0.1.2-alpha.tar.gz.sha256`
-
-Vérification facultative mais recommandée :
+Clonez le dépôt GitHub (ou utilisez **Code → Download ZIP**, puis extrayez l’archive) :
 
 ```bash
-sha256sum -c MX-Link-0.1.2-alpha.tar.gz.sha256
+git clone https://github.com/Syl6931/mx-link.git
+cd mx-link
 ```
 
-## 2. Extraire
+Les archives des versions publiées peuvent être antérieures aux dernières sources.
 
-```bash
-tar -xzf MX-Link-0.1.2-alpha.tar.gz
-cd MX-Link-0.1.2-alpha
-```
-
-## 3. Contrôler le paquet
+## 2. Contrôler le paquet
 
 ```bash
 bash install.sh --check
@@ -88,7 +79,7 @@ bash install.sh --check
 
 Cette commande n’installe rien.
 
-## 4. Installer
+## 3. Installer
 
 ```bash
 bash install.sh
@@ -96,7 +87,7 @@ bash install.sh
 
 L’installateur configure le daemon, la passerelle HTTP locale, l’applet Plasma, la page d’appairage, la règle de pare-feu, la résolution du nom en `.local` et le hook de session Plasma.
 
-## 5. Appairer l’iPhone
+## 4. Appairer l’iPhone
 
 Récupérez le nom du poste Linux :
 
@@ -134,6 +125,10 @@ Les fichiers reçus sont enregistrés par défaut dans le dossier `MX Link` situ
 Copiez du texte ou un ou plusieurs fichiers dans KDE, puis lancez le raccourci **MX Link** sur l’iPhone.
 
 # Applet Plasma
+
+L'icône représente désormais un ordinateur et un smartphone avec des flèches de transfert. **Échanges récents** affiche les trois dernières opérations ; **Voir l'historique** permet de consulter jusqu'à 30 opérations. Un clic rouvre un fichier toujours présent ou une URL. Un envoi multiple peut être déplié pour ouvrir les éléments individuellement. Les fichiers supprimés ou temporaires sont indiqués comme indisponibles. La suppression de l'historique demande confirmation.
+
+L'historique reste local au PC : `~/.local/state/mxlink/history.json` (permissions `0600`). **Le contenu des textes copiés n'est jamais enregistré**. Le réseau iPhone ne peut pas interroger cet historique ni déclencher ses actions. Seuls les transferts effectués après cette mise à jour apparaissent, sans reconstruction des anciens échanges.
 
 L’applet affiche l’état, le dernier transfert, le sens du transfert, les noms récents, l’appairage et les réglages.
 

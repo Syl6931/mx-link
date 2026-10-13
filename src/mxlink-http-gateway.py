@@ -268,6 +268,12 @@ sur votre réseau local.
             self.reject()
             return
 
+        # The activity history is exclusively local to the Plasma desktop.
+        # Do not expose recorded filenames, URLs, or open/clear actions on LAN.
+        if urlsplit(target).path in ("/history", "/history/open", "/history/clear"):
+            self.send_bytes(404, b"Not found")
+            return
+
         length = int(
             self.headers.get(
                 "Content-Length",

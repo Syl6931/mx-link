@@ -32,9 +32,11 @@ check_payload() {
     for f in \
         "$SRC_DIR/mxlink.py" \
         "$SRC_DIR/mxlink_bitmap.py" \
+        "$SRC_DIR/mxlink_history.py" \
         "$SRC_DIR/mxlink-http-gateway.py" \
         "$PLASMOID_SRC/metadata.json" \
-        "$PLASMOID_SRC/contents/ui/main.qml"
+        "$PLASMOID_SRC/contents/ui/main.qml" \
+        "$PLASMOID_SRC/contents/images/mxlink-symbolic.svg"
     do
         [ -f "$f" ] || die "fichier absent : $f"
     done
@@ -42,6 +44,7 @@ check_payload() {
     python3 -m py_compile \
         "$SRC_DIR/mxlink.py" \
         "$SRC_DIR/mxlink_bitmap.py" \
+        "$SRC_DIR/mxlink_history.py" \
         "$SRC_DIR/mxlink-http-gateway.py"
     say "✓ syntaxe Python"
 
@@ -60,6 +63,7 @@ PY
 
     grep -q 'Appairer un iPhone' \
         "$PLASMOID_SRC/contents/ui/main.qml" \
+        "$PLASMOID_SRC/contents/images/mxlink-symbolic.svg" \
         || die "interface d'appairage absente"
     say "✓ interface d'appairage"
 }

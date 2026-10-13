@@ -47,6 +47,11 @@ PlasmoidItem {
     property var pdfOpenerLabels: ["Par défaut"]
     property var pdfOpenerValues: ["default"]
     property string configMessage: ""
+    property var historyEvents: []
+    property bool historyExpanded: false
+    property string expandedGroupId: ""
+    property bool clearArmed: false
+    property string historyMessage: ""
 
     toolTipMainText: "MX Link"
 
@@ -290,6 +295,79 @@ PlasmoidItem {
         xhr.send()
     }
 
+    function refreshHistory() {
+        var xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            if (xhr.status === 200) {
+                try {
+                    var data = JSON.parse(xhr.responseText)
+                    if (Array.isArray(data))
+                        root.historyEvents = data
+                } catch (e) {
+                    root.historyMessage = "Historique indisponible"
+                }
+            }
+        }
+        xhr.open("GET", "http://127.0.0.1:8765/history")
+        xhr.send()
+    }
+
+    function sendHistoryAction(path, payload, onSuccess) {
+        var xhr = new XMLHttpRequest()
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE)
+                return
+            if (xhr.status === 200) {
+                root.historyMessage = ""
+                onSuccess()
+            } else {
+                root.historyMessage = xhr.status === 404
+                    ? "Fichier ou lien indisponible"
+                    : "Opération impossible"
+                root.refreshHistory()
+            }
+        }
+        xhr.open("POST", "http://127.0.0.1:8765/" + path)
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.send(JSON.stringify(payload))
+    }
+
+    function openHistoryItem(id, index) {
+        sendHistoryAction("history/open", {"id": id, "index": index}, function() {})
+    }
+
+    function clearHistory() {
+        sendHistoryAction("history/clear", {}, function() {
+            root.clearArmed = false
+            root.expandedGroupId = ""
+            root.historyExpanded = false
+            root.refreshHistory()
+        })
+    }
+
+    function historyTitle(entry) {
+        if (!entry || !entry.items || entry.items.length === 0)
+            return "Échange"
+        var name = entry.items[0].name
+        return entry.items.length > 1
+            ? name + "  +" + (entry.items.length - 1)
+            : name
+    }
+
+    function historyDirection(entry) {
+        return entry.direction === "out"
+            ? "↑ Vers l’iPhone" : "↓ Depuis l’iPhone"
+    }
+
+    function historyTime(entry) {
+        if (!entry.date)
+            return ""
+        var parts = entry.date.split("T")
+        return parts.length > 1 ? parts[1].substring(0, 5) : ""
+    }
+
     function refreshConfig() {
         var xhr = new XMLHttpRequest()
 
@@ -525,12 +603,15 @@ PlasmoidItem {
         repeat: true
         running: true
 
-        onTriggered:
+        onTriggered: {
             root.refreshStatus()
+            root.refreshHistory()
+        }
     }
 
     Component.onCompleted: {
         refreshStatus()
+        refreshHistory()
         refreshConfig()
     }
 
@@ -560,7 +641,7 @@ PlasmoidItem {
 
             source:
                 root.online
-                ? "smartphone"
+                ? Qt.resolvedUrl("../images/mxlink-symbolic.svg")
                 : "network-disconnect"
 
             isMask: true
@@ -578,7 +659,9 @@ PlasmoidItem {
         implicitHeight:
             root.settingsVisible
             ? Kirigami.Units.gridUnit * 29
-            : Kirigami.Units.gridUnit * 16
+            : root.historyExpanded
+                ? Kirigami.Units.gridUnit * 26
+                : Kirigami.Units.gridUnit * 19
 
         Layout.preferredWidth:
             implicitWidth
@@ -602,7 +685,7 @@ PlasmoidItem {
                 Kirigami.Icon {
                     source:
                         root.online
-                        ? "smartphone"
+                        ? Qt.resolvedUrl("../images/mxlink-symbolic.svg")
                         : "network-disconnect"
 
                     Layout.preferredWidth:
@@ -687,99 +770,193 @@ PlasmoidItem {
                 }
             }
 
-            PlasmaComponents.Label {
-                text: "Dernière activité"
-                opacity: 0.65
+            RowLayout {
+                Layout.fillWidth: true
+                visible: !root.settingsVisible
+
+                PlasmaComponents.Label {
+                    text: "Échanges récents"
+                    font.bold: true
+                    Layout.fillWidth: true
+                }
+
+                PlasmaComponents.ToolButton {
+                    visible: root.historyEvents.length > 0
+                    icon.name: root.clearArmed ? "dialog-warning" : "edit-clear-history"
+                    text: root.clearArmed ? "Confirmer ?" : ""
+                    onClicked: {
+                        if (root.clearArmed)
+                            root.clearHistory()
+                        else
+                            root.clearArmed = true
+                    }
+                    PlasmaComponents.ToolTip {
+                        text: root.clearArmed ? "Confirmer l’effacement" : "Vider l’historique"
+                    }
+                }
             }
 
-            Rectangle {
+            Item {
                 Layout.fillWidth: true
+                Layout.preferredHeight: root.historyExpanded
+                    ? Kirigami.Units.gridUnit * 17
+                    : Kirigami.Units.gridUnit * 9
+                visible: !root.settingsVisible
 
-                Layout.preferredHeight:
-                    Kirigami.Units.gridUnit * (
-                        root.lastDirection === "out"
-                        && root.batchNames
-                        && root.batchNames.length > 1
-                        ? 4.2
-                          + Math.min(
-                              root.batchNames.length - 1,
-                              4
-                          ) * 1.05
-                        : 4.2
-                    )
-
-                radius:
-                    Kirigami.Units.smallSpacing
-
-                color:
-                    Kirigami.Theme.alternateBackgroundColor
-
-                visible:
-                    root.online
-                    && root.lastName !== ""
-                    && !root.settingsVisible
-
-                RowLayout {
+                Flickable {
                     anchors.fill: parent
+                    clip: true
+                    contentHeight: historyColumn.implicitHeight
+                    boundsBehavior: Flickable.StopAtBounds
 
-                    anchors.margins:
-                        Kirigami.Units.largeSpacing
+                    Column {
+                        id: historyColumn
+                        width: parent.width
+                        spacing: Kirigami.Units.smallSpacing
 
-                    spacing:
-                        Kirigami.Units.largeSpacing
+                        Repeater {
+                            model: root.historyExpanded
+                                ? root.historyEvents
+                                : root.historyEvents.slice(0, 3)
 
-                    Kirigami.Icon {
-                        source:
-                            root.typeIcon(
-                                root.batchType !== ""
-                                ? root.batchType
-                                : root.lastType
-                            )
+                            delegate: Rectangle {
+                                id: historyEntry
+                                required property var modelData
+                                property var entry: modelData
+                                width: historyColumn.width
+                                height: entryColumn.implicitHeight + Kirigami.Units.smallSpacing * 2
+                                radius: Kirigami.Units.smallSpacing
+                                color: Kirigami.Theme.alternateBackgroundColor
 
-                        Layout.preferredWidth:
-                            Kirigami.Units.iconSizes.medium
+                                Column {
+                                    id: entryColumn
+                                    x: Kirigami.Units.smallSpacing
+                                    y: Kirigami.Units.smallSpacing
+                                    width: parent.width - Kirigami.Units.smallSpacing * 2
+                                    spacing: 2
 
-                        Layout.preferredHeight:
-                            Kirigami.Units.iconSizes.medium
-                    }
+                                    Item {
+                                        width: parent.width
+                                        height: Kirigami.Units.gridUnit * 2.45
 
-                    ColumnLayout {
-                        Layout.fillWidth: true
-                        spacing: 2
+                                        MouseArea {
+                                            anchors.fill: parent
+                                            cursorShape: historyEntry.entry.items.length > 1
+                                                || historyEntry.entry.items[0].available
+                                                ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                            onClicked: {
+                                                var evt = historyEntry.entry
+                                                if (evt.items.length > 1) {
+                                                    root.expandedGroupId = root.expandedGroupId === evt.id
+                                                        ? "" : evt.id
+                                                } else if (evt.items[0].available) {
+                                                    root.openHistoryItem(evt.id, 0)
+                                                }
+                                            }
+                                        }
 
-                        PlasmaComponents.Label {
-                            text:
-                                (root.lastDirection === "out" ? "↑ MXBook → iPhone · " : "↓ iPhone → MXBook · ") + root.activityLabel()
-                            opacity: 0.65
-                        }
+                                        RowLayout {
+                                            anchors.fill: parent
+                                            spacing: Kirigami.Units.smallSpacing
 
-                        PlasmaComponents.Label {
-                            Layout.fillWidth: true
+                                            Kirigami.Icon {
+                                                source: root.typeIcon(historyEntry.entry.type)
+                                                Layout.preferredWidth: Kirigami.Units.iconSizes.smallMedium
+                                                Layout.preferredHeight: Kirigami.Units.iconSizes.smallMedium
+                                            }
 
-                            text:
+                                            ColumnLayout {
+                                                Layout.fillWidth: true
+                                                spacing: 0
+                                                PlasmaComponents.Label {
+                                                    Layout.fillWidth: true
+                                                    text: root.historyTitle(historyEntry.entry)
+                                                    font.bold: true
+                                                    opacity: historyEntry.entry.items[0].available ? 1 : 0.55
+                                                    elide: Text.ElideMiddle
+                                                }
+                                                PlasmaComponents.Label {
+                                                    text: root.historyDirection(historyEntry.entry)
+                                                        + " · " + root.historyTime(historyEntry.entry)
+                                                    opacity: 0.65
+                                                    font.pixelSize: Kirigami.Theme.smallFont.pixelSize
+                                                }
+                                            }
+                                            Kirigami.Icon {
+                                                source: historyEntry.entry.items.length > 1
+                                                    ? (root.expandedGroupId === historyEntry.entry.id
+                                                       ? "arrow-up" : "arrow-down")
+                                                    : (historyEntry.entry.items[0].available
+                                                       ? "document-open" : "dialog-warning")
+                                                Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                                Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                            }
+                                        }
+                                    }
 
+                                    Repeater {
+                                        model: root.expandedGroupId === historyEntry.entry.id
+                                            ? historyEntry.entry.items : []
 
-                                root.namesLabel()
+                                        delegate: Item {
+                                            id: historySubitem
+                                            required property var modelData
+                                            required property int index
+                                            width: entryColumn.width
+                                            height: Kirigami.Units.gridUnit * 1.8
 
-                            font.bold: true
-
-                            elide:
-                                Text.ElideMiddle
-
-                            maximumLineCount: 5
-                        }
-
-                        PlasmaComponents.Label {
-                            text:
-                                root.lastTime !== ""
-                                ? "Reçu à "
-                                  + root.lastTime
-                                : ""
-
-                            opacity: 0.65
+                                            MouseArea {
+                                                anchors.fill: parent
+                                                enabled: historySubitem.modelData.available
+                                                cursorShape: enabled ? Qt.PointingHandCursor : Qt.ArrowCursor
+                                                onClicked: root.openHistoryItem(historyEntry.entry.id, historySubitem.index)
+                                            }
+                                            RowLayout {
+                                                anchors.fill: parent
+                                                anchors.leftMargin: Kirigami.Units.gridUnit
+                                                PlasmaComponents.Label {
+                                                    Layout.fillWidth: true
+                                                    text: historySubitem.modelData.name
+                                                    elide: Text.ElideMiddle
+                                                    opacity: historySubitem.modelData.available ? 1 : 0.45
+                                                }
+                                                Kirigami.Icon {
+                                                    source: historySubitem.modelData.available
+                                                        ? "document-open" : "dialog-warning"
+                                                    Layout.preferredWidth: Kirigami.Units.iconSizes.small
+                                                    Layout.preferredHeight: Kirigami.Units.iconSizes.small
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
                         }
                     }
                 }
+
+                PlasmaComponents.Label {
+                    anchors.centerIn: parent
+                    visible: root.historyEvents.length === 0
+                    text: "Aucun échange pour le moment"
+                    opacity: 0.6
+                }
+            }
+
+            PlasmaComponents.Label {
+                Layout.fillWidth: true
+                visible: !root.settingsVisible && root.historyMessage !== ""
+                text: root.historyMessage
+                color: Kirigami.Theme.negativeTextColor
+            }
+
+            PlasmaComponents.Button {
+                Layout.fillWidth: true
+                visible: !root.settingsVisible && root.historyEvents.length > 3
+                flat: true
+                text: root.historyExpanded ? "Réduire l’historique" : "Voir l’historique (" + root.historyEvents.length + ")"
+                icon.name: root.historyExpanded ? "arrow-up" : "view-history"
+                onClicked: root.historyExpanded = !root.historyExpanded
             }
 
             ColumnLayout {

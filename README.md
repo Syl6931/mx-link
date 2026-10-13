@@ -6,7 +6,7 @@ It is designed to feel closer to Handoff/AirDrop while staying local: no cloud s
 
 [![MX Link overview](mx-link-overview.png)](mx-link-overview.png)
 
-> **Version:** `0.1.2-alpha`
+> **Version:** `0.1.3-alpha`
 > **Status:** public alpha — functional, but still intended for testing.
 
 ## Supported setup
@@ -60,27 +60,18 @@ sha256sum -c MANIFEST.sha256
 
 # Installation
 
-## 1. Download
+## 1. Download the latest source
 
-Download:
-
-- `MX-Link-0.1.2-alpha.tar.gz`
-- `MX-Link-0.1.2-alpha.tar.gz.sha256`
-
-Optional but recommended:
+Clone the GitHub repository (or use **Code → Download ZIP** and extract it):
 
 ```bash
-sha256sum -c MX-Link-0.1.2-alpha.tar.gz.sha256
+git clone https://github.com/Syl6931/mx-link.git
+cd mx-link
 ```
 
-## 2. Extract
+The published release archives may lag behind the latest source version.
 
-```bash
-tar -xzf MX-Link-0.1.2-alpha.tar.gz
-cd MX-Link-0.1.2-alpha
-```
-
-## 3. Check the package
+## 2. Check the package
 
 ```bash
 bash install.sh --check
@@ -88,7 +79,7 @@ bash install.sh --check
 
 This does not install anything.
 
-## 4. Install
+## 3. Install
 
 ```bash
 bash install.sh
@@ -96,7 +87,7 @@ bash install.sh
 
 The installer sets up the daemon, local HTTP gateway, Plasma applet, pairing page, firewall rule, `.local` name resolution and Plasma session hook.
 
-## 5. Pair the iPhone
+## 4. Pair the iPhone
 
 Find the Linux hostname:
 
@@ -140,6 +131,10 @@ or a localized equivalent such as:
 Copy text or one or more files in KDE, then run the **MX Link** Shortcut on the iPhone.
 
 # Plasma applet
+
+The panel icon now shows a computer and phone with bidirectional arrows. **Recent transfers** lists the latest three operations; **Show history** expands to up to 30 saved operations. Click a received file, an existing sent file, or a link to reopen it; click a batch to select an individual file. Deleted or temporary files become unavailable. **Clear history** requires a second click to confirm.
+
+History metadata remains on Linux in `~/.local/state/mxlink/history.json` (mode `0600`); only 30 operations are retained. The clipboard's **text contents are never stored**. The history endpoints are restricted to the local Plasma service and refused by the iPhone LAN gateway. History begins with transfers made after upgrading; older events are not reconstructed from logs.
 
 The applet shows status, latest transfer, direction, recent filenames, pairing information and settings.
 
