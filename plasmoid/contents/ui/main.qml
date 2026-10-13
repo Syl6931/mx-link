@@ -631,11 +631,13 @@ PlasmoidItem {
         Kirigami.Icon {
             anchors.centerIn: parent
 
+            // Le symbole SVG doit occuper la zone de l'icône du panneau.
+            // 0.75 rendait l'ensemble ordinateur + téléphone minuscule.
             width:
                 Math.min(
                     parent.width,
                     parent.height
-                ) * 0.75
+                ) * 0.92
 
             height: width
 

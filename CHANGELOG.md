@@ -2,7 +2,7 @@
 
 ## 0.1.3-alpha — 2026-10-13
 
-- Nouvelle icône symbolique représentant un ordinateur et un smartphone avec transfert bidirectionnel.
+- Nouvelle icône symbolique représentant un ordinateur et un smartphone avec transfert bidirectionnel. Icône agrandie dans la zone de notification KDE et tracé SVG optimisé pour mieux occuper l’espace.
 - Historique privé local des 30 dernières opérations : sens, heure, type et éléments transférés ; fichiers et liens accessibles par clic.
 - Regroupement des envois multiples, liste dépliable des fichiers et bouton d'effacement avec confirmation.
 - Aucun contenu texte du presse-papiers conservé ; les éléments effacés ou temporaires sont indiqués comme indisponibles.

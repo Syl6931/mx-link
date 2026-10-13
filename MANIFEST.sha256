@@ -1,5 +1,5 @@
 001003e4e5040b6fc65a0ac388f642af1187971ef74baf5111487e8230c7332a  ./.gitignore
-4fa6b55bf4349dceb967dc55f68a640446b53d713bf22899c27f41a8c5639489  ./CHANGELOG.md
+b23a9542b35878c791ed36280d2145c88cfc3b95098a93011fc9a5d7eeb12fcc  ./CHANGELOG.md
 1ee208ce52f174ea4f7ab52ef88ef1eb9c655f587aefc6534c0920b908b48c0f  ./LICENSE
 ea495085823c78ddc3e30486865e2953b722827387464bd541d11695a3135fee  ./README.fr.md
 ccc78e10bed625e27e5dc1cf365cad68f231eeaed19a2b0ca63c4412821d2172  ./README.md
@@ -7,8 +7,8 @@ ccc78e10bed625e27e5dc1cf365cad68f231eeaed19a2b0ca63c4412821d2172  ./README.md
 7be49832737f466e19b0c302ee64373eed5160c10ad465347ab2176103da7266  ./VERSION
 b2f076621cd645b41e44aa734616cadcd36ba0f2bc65a7d6b77d2767c440dac8  ./install.sh
 af0e9844e479ee6b909b9fc4667cad00e5ef377baddef129ab52f1a583292422  ./mx-link-overview.png
-82f0a3b824f613740d58637335f8ce1d022b25ff7d97a4d806b6b317ed4e2adc  ./plasmoid/contents/images/mxlink-symbolic.svg
-080d0bfdc6062420a7f21b9313b977a5b901cf9277a529299201984a65b4e7cf  ./plasmoid/contents/ui/main.qml
+49f1a6c296e53b025bfebaad41ff4eae61dd2df8c70c5bf822cb9e85aa039186  ./plasmoid/contents/images/mxlink-symbolic.svg
+16c10ce3011cec9c4430e60a4f0b852776ebe5dcbeae9cc7d869da719963b455  ./plasmoid/contents/ui/main.qml
 54c178bb7ffaef4367255aa08e12d5bda03b155edffcf84fe28e7f9c1bab1780  ./plasmoid/metadata.json
 90565b4726033a2863fb9fe44812237c3bff265fe16a552a70dd0c87f7dc501e  ./scripts/update_manifest.py
 2ece6a7dfd9b57238f9c76b02e6dd3540f6cb02bc75453f49a0faf45e5e07aa1  ./src/mxlink-http-gateway.py
