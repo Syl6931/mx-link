@@ -1,5 +1,9 @@
 # Changelog
 
+## Non publié — 2026-10-14
+
+- Icône Plasma remplacée par le pictogramme épuré « monitor-smartphone » demandé : écran et téléphone, trait uniforme, sans flèches ni fond opaque ; taille légèrement agrandie.
+
 ## 0.1.3-alpha — 2026-10-13
 
 - Nouvelle icône symbolique représentant un ordinateur et un smartphone avec transfert bidirectionnel. Icône agrandie dans la zone de notification KDE et tracé SVG optimisé pour mieux occuper l’espace.
