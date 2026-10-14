@@ -2,6 +2,7 @@
 
 ## Non publié — 2026-10-14
 
+- Correction de la confirmation de nettoyage de l’historique : boutons « Annuler » et « Effacer » distincts, sans toucher aux fichiers transférés.
 - Icône Plasma remplacée par le pictogramme épuré « monitor-smartphone » demandé : écran et téléphone, trait uniforme, sans flèches ni fond opaque ; taille légèrement agrandie.
 
 ## 0.1.3-alpha — 2026-10-13

@@ -53,6 +53,12 @@ PlasmoidItem {
     property bool clearArmed: false
     property string historyMessage: ""
 
+    onExpandedChanged: {
+        // Ne jamais laisser une suppression armée après fermeture du panneau.
+        if (!expanded)
+            clearArmed = false
+    }
+
     toolTipMainText: "MX Link"
 
     toolTipSubText: {
@@ -761,8 +767,10 @@ PlasmoidItem {
 
                         if (
                             root.settingsVisible
-                        )
+                        ) {
+                            root.clearArmed = false
                             root.refreshConfig()
+                        }
                     }
 
                     PlasmaComponents.ToolTip {
@@ -776,15 +784,25 @@ PlasmoidItem {
                 visible: !root.settingsVisible
 
                 PlasmaComponents.Label {
-                    text: "Échanges récents"
+                    text: root.clearArmed ? "Effacer l’historique ?" : "Échanges récents"
                     font.bold: true
                     Layout.fillWidth: true
                 }
 
                 PlasmaComponents.ToolButton {
+                    visible: root.clearArmed && root.historyEvents.length > 0
+                    icon.name: "dialog-cancel"
+                    text: "Annuler"
+                    onClicked: root.clearArmed = false
+                    PlasmaComponents.ToolTip {
+                        text: "Annuler sans rien effacer"
+                    }
+                }
+
+                PlasmaComponents.ToolButton {
                     visible: root.historyEvents.length > 0
                     icon.name: root.clearArmed ? "dialog-warning" : "edit-clear-history"
-                    text: root.clearArmed ? "Confirmer ?" : ""
+                    text: root.clearArmed ? "Effacer" : ""
                     onClicked: {
                         if (root.clearArmed)
                             root.clearHistory()
@@ -792,7 +810,7 @@ PlasmoidItem {
                             root.clearArmed = true
                     }
                     PlasmaComponents.ToolTip {
-                        text: root.clearArmed ? "Confirmer l’effacement" : "Vider l’historique"
+                        text: root.clearArmed ? "Confirmer l’effacement de l’historique" : "Vider l’historique"
                     }
                 }
             }
