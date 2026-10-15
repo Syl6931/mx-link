@@ -120,9 +120,18 @@ Les fichiers reçus sont enregistrés par défaut dans le dossier `MX Link` situ
 ~/Téléchargements/MX Link
 ```
 
+## Lancer MX Link sans partage
+
+Depuis l’écran d’accueil, le Centre de contrôle ou l’app Raccourcis, un lancement **sans entrée partagée** propose deux choix :
+
+- **Récupérer depuis MX** : copier le presse-papiers de KDE sur l’iPhone (texte, fichiers et images selon leur type).
+- **Envoyer vers MX** : lire le presse-papiers de l’iPhone et copier son texte dans le presse-papiers KDE. Une URL copiée de cette manière reste du texte à coller.
+
+L’exécution **depuis la feuille de partage** reste un envoi immédiat sans menu, comme auparavant : texte, liens, photos, PDF et autres fichiers. Le mécanisme d’appairage n’a pas changé. Il ne s’agit pas d’une synchronisation automatique en arrière-plan.
+
 ## Linux → iPhone
 
-Copiez du texte ou un ou plusieurs fichiers dans KDE, puis lancez le raccourci **MX Link** sur l’iPhone.
+Copiez du texte ou un ou plusieurs fichiers dans KDE, puis lancez **MX Link** sur l’iPhone et choisissez **Récupérer depuis MX**.
 
 # Applet Plasma
 

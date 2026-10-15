@@ -56,7 +56,7 @@ with open(sys.argv[1], encoding="utf-8") as f:
 PY
     say "✓ metadata.json"
 
-    grep -q '4550a09c4c964894a4679a28455b921d' \
+    grep -q 'cc0988746b2f4add8c9578299107c4ae' \
         "$SRC_DIR/mxlink-http-gateway.py" \
         || die "lien du raccourci iCloud maître absent"
     say "✓ raccourci iCloud maître"

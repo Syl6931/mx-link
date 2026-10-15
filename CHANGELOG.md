@@ -1,7 +1,8 @@
 # Changelog
 
-## Non publié — 2026-10-14
+## Non publié — 2026-10-15
 
+- Raccourci iOS maître mis à jour : au lancement direct, choix entre récupération depuis KDE et envoi du presse-papiers iPhone ; depuis la feuille de partage, transfert immédiat conservé. Mise à jour du lien iCloud dans la page d’appairage et dans les vérifications d’installation.
 - Correction de la confirmation de nettoyage de l’historique : boutons « Annuler » et « Effacer » distincts, sans toucher aux fichiers transférés.
 - Icône Plasma remplacée par le pictogramme épuré « monitor-smartphone » demandé : écran et téléphone, trait uniforme, sans flèches ni fond opaque ; taille légèrement agrandie.
 

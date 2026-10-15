@@ -126,9 +126,18 @@ or a localized equivalent such as:
 ~/Téléchargements/MX Link
 ```
 
+## Running MX Link without shared input
+
+When launched **without shared content** (Home Screen, Control Center or Shortcuts), MX Link offers two choices:
+
+- **Récupérer depuis MX** (Get from MX): copy the KDE clipboard to the iPhone, using the existing text/file/image flow.
+- **Envoyer vers MX** (Send to MX): read the iPhone clipboard and copy its text to the KDE clipboard. A copied URL is pasted as text rather than opening a browser.
+
+From the **iOS share sheet**, MX Link still sends the shared content immediately with no menu: text, links, photos, PDFs or files. Existing pairing is unchanged. This is not automatic background clipboard syncing.
+
 ## Linux → iPhone
 
-Copy text or one or more files in KDE, then run the **MX Link** Shortcut on the iPhone.
+Copy text or one or more files in KDE, then run **MX Link** on the iPhone and select **Récupérer depuis MX**.
 
 # Plasma applet
 

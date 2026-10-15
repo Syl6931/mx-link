@@ -30,7 +30,7 @@ BACKEND_PORT = 8765
 
 SHORTCUT_URL = (
     "https://www.icloud.com/shortcuts/"
-    "4550a09c4c964894a4679a28455b921d"
+    "cc0988746b2f4add8c9578299107c4ae"
 )
 
 TOKEN = (
