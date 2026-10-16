@@ -40,6 +40,14 @@ That's it. On iPhone, use **Share → MX Link** to send something immediately, o
 
 Received files go to **Downloads/MX Link** by default. The Plasma widget shows recent transfers and reception settings.
 
+## Local network access and security
+
+MX Link needs **inbound TCP port 8767 on your Linux computer** so the iPhone can reach it. The gateway listens on all network interfaces (`0.0.0.0:8767`); its internal daemon listens only on `127.0.0.1:8765`. No router port forwarding or Internet-facing port is needed — **do not forward TCP 8767 on your router**.
+
+During installation, MX Link adds a UFW firewall allow rule for TCP 8767 **from the local IPv4 subnet detected on the default network interface**. The installer does **not** enable UFW. The rule restricts access only when UFW is active; if you use another firewall, configure it yourself. On machines with multiple network interfaces, check which networks can reach port 8767.
+
+**Use MX Link only on a trusted local network.** The `/setup` pairing page can be opened without authentication and includes the pairing token: anyone who can reach that page can obtain the token. Other transfer requests require that token, but traffic uses **unencrypted HTTP**, not HTTPS. Avoid public or untrusted Wi-Fi.
+
 ## Uninstall
 
 ```bash
