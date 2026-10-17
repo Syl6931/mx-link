@@ -1,6 +1,5 @@
 #!/usr/bin/env python3
 
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import (
     urlsplit,
     parse_qsl,
@@ -13,8 +12,9 @@ import http.client
 import html
 import hmac
 import json
-import re
 import socket
+from mxlink_http import SafeHandler, BoundedServer, MAX_UPLOAD, MAX_JSON
+from mxlink_pairing import grant
 
 HOST = "0.0.0.0"
 PORT = 8767
@@ -68,8 +68,8 @@ def authenticated_path(raw_path, authorization):
     valid = (
         supplied is not None
         and hmac.compare_digest(
-            supplied,
-            TOKEN
+            supplied.encode("utf-8"),
+            TOKEN.encode("utf-8")
         )
     )
 
@@ -84,7 +84,7 @@ def authenticated_path(raw_path, authorization):
     return valid, clean_path
 
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(SafeHandler):
 
     protocol_version = "HTTP/1.1"
 
@@ -111,30 +111,10 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def setup_page(self):
-        # L'appairage utilise toujours le nom mDNS stable,
-        # indépendamment de l'adresse utilisée pour ouvrir cette page.
-        base_url = f"http://{MDNS_HOST}:{PORT}"
-
-        payload = (
-            "MXLINKPAIR:"
-            + json.dumps(
-                {
-                    "version": 1,
-                    "name": "MXBook",
-                    "base_url": base_url,
-                    "token": TOKEN,
-                },
-                ensure_ascii=False,
-                separators=(",", ":"),
-            )
-        )
-
-        pair_url = (
-            "shortcuts://run-shortcut"
-            "?name=" + quote("MX Link", safe="")
-            + "&input=text"
-            + "&text=" + quote(payload, safe="")
-        )
+        code = dict(parse_qsl(urlsplit(self.path).query)).get("code", "")
+        if not code or not grant(consume=code, peek=True):
+            self.send_bytes(403, b"Open a new pairing window from MX Link or mxlink pair.")
+            return
 
         page = f"""<!doctype html>
 <html lang="fr">
@@ -174,7 +154,7 @@ h1 {{
     font-weight: 700;
 }}
 
-a.button {{
+.button {{
     display: block;
     box-sizing: border-box;
     width: 100%;
@@ -183,6 +163,9 @@ a.button {{
     border-radius: 14px;
     text-align: center;
     text-decoration: none;
+    border: 0;
+    cursor: pointer;
+    font-family: inherit;
     font-size: 18px;
     font-weight: 700;
 }}
@@ -231,10 +214,11 @@ Installer MX Link
 
 <div class="step">2. Revenir ici puis appairer</div>
 
-<a class="button pair"
-   href="{html.escape(pair_url, quote=True)}">
+<form method="post" action="/setup/pair?code={html.escape(code, quote=True)}">
+<button class="button pair" type="submit">
 Appairer cet iPhone
-</a>
+</button>
+</form>
 
 <div class="note">
 MX Link communique directement avec cet ordinateur
@@ -246,11 +230,36 @@ sur votre réseau local.
 </html>
 """
 
-        self.send_bytes(
-            200,
-            page.encode("utf-8"),
-            "text/html; charset=utf-8"
+        self.send_bytes(200, page.encode("utf-8"), "text/html; charset=utf-8")
+
+    def complete_pairing(self):
+        code = dict(parse_qsl(urlsplit(self.path).query)).get("code", "")
+        if not code or not grant(consume=code):
+            self.send_bytes(403, b"Open a new pairing window from MX Link or mxlink pair.")
+            return
+
+        # A single click redirects into Shortcuts; no second HTML page.
+        base_url = f"http://{MDNS_HOST}:{PORT}"
+        payload = "MXLINKPAIR:" + json.dumps(
+            {
+                "version": 1,
+                "name": socket.gethostname().split(".")[0],
+                "base_url": base_url,
+                "token": TOKEN,
+            },
+            ensure_ascii=False,
+            separators=(",", ":"),
         )
+        pair_url = (
+            "shortcuts://run-shortcut"
+            "?name=" + quote("MX Link", safe="")
+            + "&input=text"
+            + "&text=" + quote(payload, safe="")
+        )
+        self.send_response(303)
+        self.send_header("Location", pair_url)
+        self.send_header("Content-Length", "0")
+        self.end_headers()
 
     def reject(self):
         self.send_bytes(
@@ -268,18 +277,19 @@ sur votre réseau local.
             self.reject()
             return
 
-        # The activity history is exclusively local to the Plasma desktop.
-        # Do not expose recorded filenames, URLs, or open/clear actions on LAN.
-        if urlsplit(target).path in ("/history", "/history/open", "/history/clear"):
+        allowed = {
+            "GET": {"/health", "/clipboard", "/clipboard/type", "/clipboard/raw",
+                    "/clipboard/manifest", "/clipboard/item"},
+            "POST": {"/", "/upload"},
+        }
+        if urlsplit(target).path not in allowed.get(self.command, set()):
             self.send_bytes(404, b"Not found")
             return
-
-        length = int(
-            self.headers.get(
-                "Content-Length",
-                "0"
-            ) or "0"
-        )
+        length = 0
+        if self.command == "POST":
+            length = self.body_length(MAX_UPLOAD if urlsplit(target).path == "/upload" else MAX_JSON)
+            if length is None:
+                return
 
         conn = http.client.HTTPConnection(
             BACKEND_HOST,
@@ -287,88 +297,92 @@ sur votre réseau local.
             timeout=300
         )
 
-        conn.putrequest(
-            self.command,
-            target
-        )
+        try:
+            conn.putrequest(
+                self.command,
+                target
+            )
 
-        for header in (
-            "Content-Type",
-            "Content-Disposition",
-            "Accept",
-            "User-Agent",
-        ):
-            value = self.headers.get(header)
+            for header in (
+                "Content-Type",
+                "Content-Disposition",
+                "Accept",
+                "User-Agent",
+                "X-MX-Filename",
+            ):
+                value = self.headers.get(header)
 
-            if value:
+                if value:
+                    conn.putheader(
+                        header,
+                        value
+                    )
+
+            if length:
                 conn.putheader(
-                    header,
-                    value
+                    "Content-Length",
+                    str(length)
                 )
 
-        if length:
-            conn.putheader(
+            conn.endheaders()
+
+            remaining = length
+
+            while remaining > 0:
+                chunk = self.rfile.read(
+                    min(
+                        1024 * 1024,
+                        remaining
+                    )
+                )
+
+                if not chunk:
+                    self.send_bytes(400, b"Incomplete body")
+                    return
+
+                conn.send(chunk)
+                remaining -= len(chunk)
+
+            response = conn.getresponse()
+
+            self.send_response(
+                response.status
+            )
+
+            for header in (
+                "Content-Type",
                 "Content-Length",
-                str(length)
-            )
-
-        conn.endheaders()
-
-        remaining = length
-
-        while remaining > 0:
-            chunk = self.rfile.read(
-                min(
-                    1024 * 1024,
-                    remaining
-                )
-            )
-
-            if not chunk:
-                break
-
-            conn.send(chunk)
-            remaining -= len(chunk)
-
-        response = conn.getresponse()
-
-        self.send_response(
-            response.status
-        )
-
-        for header in (
-            "Content-Type",
-            "Content-Length",
-            "Content-Disposition",
-        ):
-            value = response.getheader(
-                header
-            )
-
-            if value:
-                self.send_header(
-                    header,
-                    value
+                "Content-Disposition",
+            ):
+                value = response.getheader(
+                    header
                 )
 
-        self.send_header(
-            "Connection",
-            "close"
-        )
+                if value:
+                    self.send_header(
+                        header,
+                        value
+                    )
 
-        self.end_headers()
-
-        while True:
-            chunk = response.read(
-                1024 * 1024
+            self.send_header(
+                "Connection",
+                "close"
             )
 
-            if not chunk:
-                break
+            self.end_headers()
 
-            self.wfile.write(chunk)
+            while True:
+                chunk = response.read(
+                    1024 * 1024
+                )
 
-        conn.close()
+                if not chunk:
+                    break
+
+                self.wfile.write(chunk)
+
+        finally:
+            conn.close()
 
     def do_GET(self):
         path = urlsplit(
@@ -386,10 +400,22 @@ sur votre réseau local.
             )
             return
 
-        self.proxy()
+        try:
+            self.proxy()
+        except (OSError, http.client.HTTPException):
+            self.close_connection = True
 
     def do_POST(self):
-        self.proxy()
+        if urlsplit(self.path).path == "/setup/pair":
+            length = self.body_length(1024)
+            if length is not None:
+                self.rfile.read(length)
+                self.complete_pairing()
+            return
+        try:
+            self.proxy()
+        except (OSError, http.client.HTTPException):
+            self.close_connection = True
 
     def log_message(
         self,
@@ -399,9 +425,6 @@ sur votre réseau local.
         pass
 
 
-server = ThreadingHTTPServer(
-    (HOST, PORT),
-    Handler
-)
-
-server.serve_forever()
+if __name__ == "__main__":
+    with BoundedServer((HOST, PORT), Handler) as server:
+        server.serve_forever()

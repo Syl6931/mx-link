@@ -27,7 +27,28 @@ PlasmoidItem {
 
     property bool settingsVisible: false
     property bool pairingVisible: false
-    property string pairingUrl: "http://localhost:8767/setup"
+    property string pairingUrl: ""
+    property string pairingQr: ""
+    function startPairing() {
+        root.pairingUrl = "Préparation…"
+        root.pairingQr = ""
+        root.pairingVisible = true
+        var xhr = new XMLHttpRequest()
+        xhr.open("POST", "http://127.0.0.1:8765/pairing/start")
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.onreadystatechange = function() {
+            if (xhr.readyState !== XMLHttpRequest.DONE) return
+            if (xhr.status === 200) {
+                var result = JSON.parse(xhr.responseText)
+                root.pairingUrl = result.url
+                root.pairingQr = result.qr || ""
+            } else {
+                root.pairingUrl = "Appairage indisponible : vérifiez le service MX Link."
+            }
+        }
+        xhr.send("{}")
+    }
+
     property bool configLoaded: false
 
     property string configReceiveDir: ""
@@ -587,11 +608,12 @@ PlasmoidItem {
         var xhr = new XMLHttpRequest()
 
         xhr.open(
-            "GET",
+            "POST",
             "http://127.0.0.1:8765/open-folder"
         )
 
-        xhr.send()
+        xhr.setRequestHeader("Content-Type", "application/json")
+        xhr.send("{}")
     }
 
     Timer {
@@ -1244,7 +1266,7 @@ PlasmaComponents.CheckBox {
                     "smartphone"
 
                 onClicked:
-                    root.pairingVisible = true
+                    root.startPairing()
             }
 
             
@@ -1305,7 +1327,7 @@ PlasmaComponents.CheckBox {
                     Layout.fillWidth: true
 
                     text:
-                        "Scannez ce QR code avec l’iPhone"
+                        "Valable 5 minutes · une seule ouverture"
 
                     horizontalAlignment:
                         Text.AlignHCenter
@@ -1322,9 +1344,7 @@ PlasmaComponents.CheckBox {
                         Kirigami.Units.gridUnit * 8
 
                     source:
-                        Qt.resolvedUrl(
-                            "../images/pairing-qr.png"
-                        )
+                        root.pairingQr
 
                     fillMode:
                         Image.PreserveAspectFit

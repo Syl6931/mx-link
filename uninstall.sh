@@ -8,6 +8,7 @@ fi
 set -Eeuo pipefail
 
 PURGE="${1:-}"
+[[ "$PURGE" = "" || "$PURGE" = "--purge" ]] || { echo "Unknown option"; exit 1; }
 
 APP_DIR="$HOME/.local/share/mxlink"
 CONFIG_DIR="$HOME/.config/mxlink"
@@ -52,7 +53,7 @@ NETWORK=""
 
 if [ -f "$CONFIG_DIR/install.env" ]; then
     # shellcheck disable=SC1090
-    source "$CONFIG_DIR/install.env"
+    MXLINK_NETWORK="$(sed -n 's/^MXLINK_NETWORK=//p' "$CONFIG_DIR/install.env")"
     NETWORK="${MXLINK_NETWORK:-}"
 fi
 
@@ -73,9 +74,10 @@ fi
 
 rm -f "$HOME/.config/autostart/mxlink-session-environment.desktop"
 rm -rf "$PLASMOID_DIR" "$APP_DIR"
+rm -f "$HOME/.local/bin/mxlink"
 
 if [ "$PURGE" = "--purge" ]; then
-    rm -rf "$CONFIG_DIR" "$HOME/.local/state/mxlink/history.json"
+    rm -rf "$CONFIG_DIR" "$HOME/.local/state/mxlink" "$HOME/.cache/mxlink"
     echo "✓ configuration et jeton supprimés"
 else
     echo "• configuration conservée dans $CONFIG_DIR"

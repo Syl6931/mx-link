@@ -51,6 +51,8 @@ class BitmapTests(unittest.TestCase):
         cls.sandbox.cleanup()
 
     def setUp(self):
+        self.prev_wayland = os.environ.get("WAYLAND_DISPLAY")
+        os.environ["WAYLAND_DISPLAY"] = "test-only"
         self.real_which = bitmap.shutil.which
         self.old_file_paths = self.app.clipboard_file_paths
         self.old_image_mime = self.app.image_mime
@@ -77,6 +79,10 @@ class BitmapTests(unittest.TestCase):
         self.app._clipboard_sessions.clear()
 
     def tearDown(self):
+        if self.prev_wayland is None:
+            os.environ.pop("WAYLAND_DISPLAY", None)
+        else:
+            os.environ["WAYLAND_DISPLAY"] = self.prev_wayland
         bitmap.shutil.which = self.real_which
         self.app.clipboard_file_paths = self.old_file_paths
         self.app.image_mime = self.old_image_mime
@@ -104,9 +110,9 @@ class BitmapTests(unittest.TestCase):
         self.assertFalse(target.exists())
 
     def test_bmp_is_converted_to_png(self):
-        if not self.real_which("magick"):
+        if not (self.real_which("magick") or self.real_which("convert")):
             self.skipTest("ImageMagick is not installed")
-        subprocess.run(["magick", "-size", "2x2", "xc:blue", "BMP3:" + str(self.data_path)],
+        subprocess.run([self.real_which("magick") or self.real_which("convert"), "-size", "2x2", "xc:blue", "BMP3:" + str(self.data_path)],
                        check=True)
         self.fake_tool.write_text(self.fake_tool.read_text().replace("image/png", "image/bmp"))
         captured = bitmap.capture_image("image/bmp")

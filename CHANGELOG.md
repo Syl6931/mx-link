@@ -1,3 +1,20 @@
+# 0.1.4-alpha — 2026-10-17
+
+- Appairage iOS sur une seule page web : installation du raccourci et bouton d’appairage direct, sans page « Préparer l’appairage » en double.
+- L’appairage conserve un lien privé valable cinq minutes et utilisable une seule fois ; la redirection vers Raccourcis intervient après validation du bouton.
+- Services découplés de Plasma, CLI autonome, mode headless, adaptateurs Wayland/X11.
+- Transferts et traitement HTTP renforcés, installation/purge, documentation et tests d’intégration.
+
+## Historique de préparation — candidat 1 (2026-10-17)
+
+- Temporary one-use pairing; LAN transfer endpoint allowlist.
+- Standalone CLI, optional Plasma widget, Wayland/X11 and forced headless exchange.
+- Streamed bounded uploads, collision-safe private files, corrected MIME signatures.
+- Fresh-install logging fix, log rotation, removal of clipboard text/URL logging.
+- Obsolete TLS/status/Chrome-specific paths removed; shared HTTP and clipboard modules.
+- Installer/purge fixes, regression/integration tests, CI and bilingual documentation.
+- Candidate 1 testé sur MX Linux et iPhone avant correction du parcours d’appairage.
+
 # Changelog
 
 ## Non publié — 2026-10-15

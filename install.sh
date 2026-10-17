@@ -6,6 +6,7 @@ if [[ "${BASH_SOURCE[0]}" != "$0" ]]; then
 fi
 
 set -Eeuo pipefail
+umask 077
 
 SCRIPT_DIR="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 VERSION="$(cat "$SCRIPT_DIR/VERSION" 2>/dev/null || echo inconnue)"
@@ -20,7 +21,25 @@ PLASMOID_ID="org.mxlink.plasmoid"
 PLASMOID_DIR="$HOME/.local/share/plasma/plasmoids/$PLASMOID_ID"
 BACKUP_BASE="$HOME/.local/share/mxlink-backups"
 
-MODE="${1:---install}"
+MODE="--install"
+PLASMA=auto
+HEADLESS=0
+SKIP_DEPS=false
+for arg in "$@"; do
+    case "$arg" in
+        --check|--install) MODE="$arg" ;;
+        --headless) PLASMA=no; HEADLESS=1 ;;
+        --skip-deps) SKIP_DEPS=true ;;
+        *) echo "Unknown option: $arg"; exit 1 ;;
+    esac
+done
+if [ "$PLASMA" = auto ]; then
+    if command -v plasmashell >/dev/null && command -v kpackagetool6 >/dev/null; then
+        PLASMA=yes
+    else
+        PLASMA=no
+    fi
+fi
 
 say() { printf '%s\n' "$*"; }
 die() { say "ERREUR : $*"; exit 1; }
@@ -41,11 +60,13 @@ check_payload() {
         [ -f "$f" ] || die "fichier absent : $f"
     done
 
-    python3 -m py_compile \
-        "$SRC_DIR/mxlink.py" \
-        "$SRC_DIR/mxlink_bitmap.py" \
-        "$SRC_DIR/mxlink_history.py" \
-        "$SRC_DIR/mxlink-http-gateway.py"
+    python3 - "$SRC_DIR" <<'PYCODE'
+from pathlib import Path
+import sys
+for path in Path(sys.argv[1]).glob('*.py'):
+    compile(path.read_bytes(), str(path), 'exec')
+PYCODE
+    (cd "$SCRIPT_DIR" && sha256sum --quiet -c MANIFEST.sha256) || die "Manifest mismatch"
     say "✓ syntaxe Python"
 
     python3 - "$PLASMOID_SRC/metadata.json" <<'PY'
@@ -119,18 +140,20 @@ PACKAGES=(
     python3
     curl
     qrencode
-    xdg-user-dirs
-    libnotify-bin
-    wl-clipboard
-    imagemagick
+    iproute2
 
     avahi-daemon
     libnss-mdns
     ufw
 )
 
+if [ "$HEADLESS" = 0 ]; then
+    PACKAGES+=(xdg-user-dirs xdg-utils libnotify-bin xclip wl-clipboard imagemagick)
+fi
+
 MISSING=()
 
+if ! $SKIP_DEPS; then
 command -v dpkg >/dev/null 2>&1 \
     || die "Cette version cible Debian/MX Linux."
 
@@ -146,10 +169,10 @@ else
     say "✓ dépendances déjà présentes"
 fi
 
-command -v kpackagetool6 >/dev/null 2>&1 \
-    || die "kpackagetool6 est requis pour installer l'applet Plasma"
-
-sudo systemctl enable --now avahi-daemon >/dev/null 2>&1 || true
+sudo systemctl enable --now avahi-daemon
+fi
+command -v python3 >/dev/null || die "python3 required"
+systemctl --user show-environment >/dev/null || die "A systemd user session is required (see docs)."
 
 STAMP="$(date +%Y%m%d-%H%M%S)"
 BACKUP="$BACKUP_BASE/$STAMP"
@@ -164,10 +187,11 @@ fi
 say
 say "=== Fichiers MX Link ==="
 
+systemctl --user stop mxlink-http.service mxlink.service 2>/dev/null || true
 rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR"
 
-cp -a "$SRC_DIR/." "$APP_DIR/"
+cp "$SRC_DIR/"*.py "$SRC_DIR/"*.sh "$APP_DIR/"
 
 chmod 700 \
     "$APP_DIR/mxlink.py" \
@@ -183,8 +207,7 @@ cat > "$HOME/.config/autostart/mxlink-session-environment.desktop" <<EOF
 Type=Application
 Name=MX Link session environment
 Comment=Expose la session graphique Plasma aux services MX Link
-Exec=$APP_DIR/mxlink-session-environment.sh
-OnlyShowIn=KDE;
+Exec="$APP_DIR/mxlink-session-environment.sh"
 X-KDE-autostart-after=panel
 NoDisplay=true
 EOF
@@ -223,58 +246,23 @@ else
 fi
 
 say
-say "=== Applet Plasma ==="
-
-if [ -d "$PLASMOID_DIR" ]; then
-    kpackagetool6 \
-        --type Plasma/Applet \
-        --upgrade "$PLASMOID_SRC" \
-        >/dev/null 2>&1 \
-    || true
-else
-    kpackagetool6 \
-        --type Plasma/Applet \
-        --install "$PLASMOID_SRC" \
-        >/dev/null
+if [ "$PLASMA" = yes ]; then
+    if [ -d "$PLASMOID_DIR" ]; then
+        kpackagetool6 --type Plasma/Applet --upgrade "$PLASMOID_SRC"
+    else
+        kpackagetool6 --type Plasma/Applet --install "$PLASMOID_SRC"
+    fi
 fi
-
-[ -d "$PLASMOID_DIR" ] \
-    || die "l'installation du plasmoid a échoué"
-
 HOST_SHORT="$(hostname -s)"
 MDNS_HOST="${HOST_SHORT}.local"
-SETUP_URL="http://${MDNS_HOST}:8767/setup"
+mkdir -p "$HOME/.local/bin"
+cat > "$HOME/.local/bin/mxlink" <<CLI
+#!/usr/bin/env bash
+export MXLINK_HEADLESS=$HEADLESS
+exec python3 "\$HOME/.local/share/mxlink/mxlink-cli.py" "\$@"
+CLI
+chmod 700 "$HOME/.local/bin/mxlink"
 
-QML="$PLASMOID_DIR/contents/ui/main.qml"
-QR="$PLASMOID_DIR/contents/images/pairing-qr.png"
-
-mkdir -p "$(dirname "$QR")"
-
-python3 - "$QML" "$SETUP_URL" <<'PY'
-from pathlib import Path
-import re
-import sys
-
-p = Path(sys.argv[1])
-url = sys.argv[2]
-s = p.read_text(encoding="utf-8")
-
-s, n = re.subn(
-    r'property string pairingUrl:\s*"[^"]*"',
-    f'property string pairingUrl: "{url}"',
-    s,
-    count=1
-)
-if n != 1:
-    raise SystemExit("pairingUrl introuvable dans le QML installé")
-
-p.write_text(s, encoding="utf-8")
-PY
-
-qrencode -o "$QR" -s 12 -m 3 "$SETUP_URL"
-say "✓ QR généré : $SETUP_URL"
-
-say
 say "=== Services ==="
 
 mkdir -p "$SYSTEMD_DIR"
@@ -282,13 +270,15 @@ mkdir -p "$SYSTEMD_DIR"
 cat > "$SYSTEMD_DIR/mxlink.service" <<'UNIT'
 [Unit]
 Description=MX Link daemon
-After=graphical-session.target
+After=network.target
 
 [Service]
 Type=simple
 ExecStart=/usr/bin/python3 %h/.local/share/mxlink/mxlink.py
 Restart=on-failure
 RestartSec=2
+UMask=0077
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=default.target
@@ -305,10 +295,16 @@ Type=simple
 ExecStart=/usr/bin/python3 %h/.local/share/mxlink/mxlink-http-gateway.py
 Restart=on-failure
 RestartSec=2
+UMask=0077
+NoNewPrivileges=yes
 
 [Install]
 WantedBy=default.target
 UNIT
+
+if [ "$HEADLESS" = 1 ]; then
+    sed -i "/Type=simple/a Environment=MXLINK_HEADLESS=1" "$SYSTEMD_DIR/mxlink.service"
+fi
 
 systemctl --user import-environment \
     DISPLAY WAYLAND_DISPLAY XDG_RUNTIME_DIR XDG_SESSION_TYPE \
@@ -324,7 +320,8 @@ if command -v dbus-update-activation-environment >/dev/null 2>&1; then
 fi
 
 systemctl --user daemon-reload
-systemctl --user enable --now mxlink.service mxlink-http.service
+systemctl --user enable mxlink.service mxlink-http.service
+systemctl --user restart mxlink.service mxlink-http.service
 
 say "✓ services démarrés"
 
@@ -332,20 +329,14 @@ say
 say "=== Pare-feu ==="
 
 IFACE="$(ip route show default | awk 'NR==1 {print $5}')"
-CIDR="$(
-    ip -o -4 addr show dev "$IFACE" scope global \
-    | awk 'NR==1 {print $4}'
-)"
-
-[ -n "$CIDR" ] || die "Impossible d'identifier le réseau local"
-
-NETWORK="$(
-    python3 - "$CIDR" <<'PY'
-import ipaddress
-import sys
-print(ipaddress.ip_network(sys.argv[1], strict=False))
-PY
-)"
+NETWORK=""
+if [ -n "$IFACE" ]; then
+    CIDR="$(ip -o -4 addr show dev "$IFACE" scope global | awk 'NR==1 {print $4}')"
+    if [ -n "$CIDR" ]; then
+        NETWORK="$(python3 -c 'import ipaddress,sys; print(ipaddress.ip_network(sys.argv[1], strict=False))' "$CIDR")"
+    fi
+fi
+[ -n "$NETWORK" ] || say "⚠ Réseau non détecté : configurez le pare-feu avant utilisation."
 
 cat > "$CONFIG_DIR/install.env" <<EOF
 MXLINK_INTERFACE=$IFACE
@@ -353,7 +344,7 @@ MXLINK_NETWORK=$NETWORK
 MXLINK_MDNS_HOST=$MDNS_HOST
 EOF
 
-if command -v ufw >/dev/null 2>&1; then
+if [ -n "$NETWORK" ] && command -v ufw >/dev/null 2>&1; then
     sudo ufw allow \
         from "$NETWORK" \
         to any port 8767 \
@@ -371,7 +362,7 @@ say "=== Ajout de l'applet au panneau ==="
 
 QDBUS="$(command -v qdbus6 || command -v qdbus || true)"
 
-if [ -n "$QDBUS" ]; then
+if [ "$PLASMA" = yes ] && [ -n "$QDBUS" ]; then
     "$QDBUS" \
         org.kde.plasmashell \
         /PlasmaShell \
@@ -414,7 +405,7 @@ if (target !== null) {
 
     say "✓ applet traitée"
 else
-    say "⚠ qdbus indisponible : ajoutez MX Link manuellement au panneau"
+    say "• Installation sans ajout automatique au panneau"
 fi
 
 say
@@ -431,20 +422,22 @@ systemctl --user is-active --quiet mxlink-http.service \
 TOKEN="$(cat "$CONFIG_DIR/token")"
 
 RESULT="$(
-    curl -fsS "http://127.0.0.1:8767/health?key=$TOKEN"
+    printf 'header = "Authorization: Bearer %s"\n' "$TOKEN" | curl -fsS --config - "http://127.0.0.1:8767/health"
 )"
+
+unset TOKEN
 
 [ "$RESULT" = "MX Link OK" ] \
     || die "/health inattendu : $RESULT"
 
-curl -fsS "http://127.0.0.1:8767/setup" >/dev/null
+curl -fsS "http://127.0.0.1:8767/setup/health" >/dev/null
 
 say "✓ daemon"
 say "✓ gateway"
 say "✓ page d'appairage"
 
 if curl -fsS --max-time 4 \
-    "http://${MDNS_HOST}:8767/setup" \
+    "http://${MDNS_HOST}:8767/setup/health" \
     >/dev/null 2>&1
 then
     say "✓ mDNS : $MDNS_HOST"
@@ -457,7 +450,7 @@ say "======================================================"
 say " MX LINK INSTALLÉ"
 say "======================================================"
 say
-say "Page d'appairage : $SETUP_URL"
+say "Appairage : ~/.local/bin/mxlink pair (ou bouton du plasmoïde)."
 say
 say "=== Réseau local et sécurité ==="
 say "Port entrant : TCP 8767 (HTTP, toutes les interfaces réseau)."
@@ -465,6 +458,6 @@ say "Service interne : TCP 8765 sur 127.0.0.1 uniquement."
 say "UFW : règle d'accès TCP 8767 ajoutée pour $NETWORK (effective si UFW actif)."
 say "UFW n'est pas activé par l'installateur ; vérifiez votre pare-feu."
 say "Aucune redirection de port n'est nécessaire sur la box ou le routeur."
-say "ATTENTION : /setup révèle le jeton d'appairage aux appareils qui peuvent"
-say "accéder au port 8767. Utilisez uniquement un réseau local de confiance."
+say "Appairage temporaire : lien privé valable 5 minutes, utilisable une fois."
+say "Utilisez uniquement un réseau local de confiance."
 say "Le trafic est en HTTP non chiffré (pas de HTTPS)."

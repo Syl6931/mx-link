@@ -16,11 +16,15 @@ PNG_SIGNATURE = b"\x89PNG\r\n\x1a\n"
 
 
 def image_mime():
-    tool = shutil.which("wl-paste")
+    if os.environ.get("MXLINK_HEADLESS") == "1":
+        return None
+    tool = shutil.which("wl-paste") if os.environ.get("WAYLAND_DISPLAY") else None
+    xclip = shutil.which("xclip") if os.environ.get("DISPLAY") else None
+    tool = tool or xclip
     if not tool:
         return None
     try:
-        res = subprocess.run([tool, "--list-types"], capture_output=True,
+        res = subprocess.run(([tool, "-selection", "clipboard", "-t", "TARGETS", "-o"] if tool == xclip else [tool, "--list-types"]), capture_output=True,
                              text=True, timeout=3, check=False)
         if res.returncode:
             return None
@@ -34,7 +38,9 @@ def image_mime():
 def capture_image(mime=None):
     """Export en PNG 0600, sans modifier le presse-papiers d'origine."""
     mime = mime or image_mime()
-    wl_paste = shutil.which("wl-paste")
+    wl_paste = shutil.which("wl-paste") if os.environ.get("WAYLAND_DISPLAY") else None
+    xclip = shutil.which("xclip") if os.environ.get("DISPLAY") else None
+    wl_paste = wl_paste or xclip
     if mime not in TYPES or not wl_paste:
         return None
     CACHE.mkdir(mode=0o700, parents=True, exist_ok=True)
@@ -45,13 +51,13 @@ def capture_image(mime=None):
     try:
         with source.open("xb") as out:
             os.chmod(source, 0o600)
-            proc = subprocess.run([wl_paste, "--type", mime], stdout=out,
+            proc = subprocess.run(([wl_paste, "-selection", "clipboard", "-t", mime, "-o"] if wl_paste == xclip else [wl_paste, "--type", mime]), stdout=out,
                                   stderr=subprocess.DEVNULL, timeout=12,
                                   check=False)
         if proc.returncode or not (8 < source.stat().st_size <= MAX_BYTES):
             return None
         if mime != "image/png":
-            magick = shutil.which("magick")
+            magick = (shutil.which("magick") or shutil.which("convert"))
             if not magick:
                 return None
             proc = subprocess.run(

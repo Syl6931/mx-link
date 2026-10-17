@@ -1,11 +1,16 @@
 #!/usr/bin/env python3
 
-from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from urllib.parse import urlparse, parse_qs, unquote, quote
 from pathlib import Path
 import datetime
 import json
 import logging
+from logging.handlers import RotatingFileHandler
+from mxlink_http import SafeHandler, BoundedServer, MAX_UPLOAD, MAX_JSON
+from mxlink_pairing import grant
+import mxlink_clipboard as clipboard
+import base64
+import tempfile
 import mimetypes
 import os
 import re
@@ -23,13 +28,16 @@ PORT = 8765
 
 LOG_FILE = os.path.expanduser("~/.local/state/mxlink/mxlink.log")
 
+Path(LOG_FILE).parent.mkdir(parents=True, exist_ok=True, mode=0o700)
+os.umask(0o077)
+
 logging.basicConfig(
     level=logging.INFO,
     format="%(asctime)s [MX Link] %(message)s",
     datefmt="%H:%M:%S",
     handlers=[
         logging.StreamHandler(sys.stdout),
-        logging.FileHandler(LOG_FILE, encoding="utf-8"),
+        RotatingFileHandler(LOG_FILE, maxBytes=1024*1024, backupCount=2, encoding="utf-8"),
     ],
 )
 
@@ -332,7 +340,7 @@ STATE_FILE.parent.mkdir(
     exist_ok=True
 )
 
-_state_lock = threading.Lock()
+_state_lock = threading.RLock()
 
 _batch_last_at = None
 _batch_type = None
@@ -385,18 +393,19 @@ def read_state():
 
 
 def write_state(state):
-    tmp = STATE_FILE.with_suffix(".json.tmp")
+    with _state_lock:
+        tmp = STATE_FILE.with_suffix(".json.tmp")
 
-    tmp.write_text(
-        json.dumps(
-            state,
-            ensure_ascii=False,
-            indent=2
-        ) + "\n",
-        encoding="utf-8"
-    )
+        tmp.write_text(
+            json.dumps(
+                state,
+                ensure_ascii=False,
+                indent=2
+            ) + "\n",
+            encoding="utf-8"
+        )
 
-    os.replace(tmp, STATE_FILE)
+        os.replace(tmp, STATE_FILE)
 
 
 def classify_mime(mime):
@@ -514,116 +523,11 @@ def record_simple_event(
 
 
 def read_clipboard_live():
-    commands = []
-
-    qdbus = (
-        shutil.which("qdbus6")
-        or shutil.which("qdbus")
-    )
-
-    if qdbus:
-        commands.append((
-            [
-                qdbus,
-                "org.kde.klipper",
-                "/klipper",
-                "getClipboardContents",
-            ],
-            True
-        ))
-
-    wl_paste = shutil.which("wl-paste")
-
-    if wl_paste:
-        commands.append((
-            [
-                wl_paste,
-                "--no-newline",
-            ],
-            False
-        ))
-
-    xclip = shutil.which("xclip")
-
-    if xclip:
-        commands.append((
-            [
-                xclip,
-                "-selection",
-                "clipboard",
-                "-o",
-            ],
-            False
-        ))
-
-    for command, qdbus_output in commands:
-        try:
-            result = subprocess.run(
-                command,
-                stdout=subprocess.PIPE,
-                stderr=subprocess.DEVNULL,
-                text=True,
-                timeout=2,
-            )
-
-            if result.returncode != 0:
-                continue
-
-            text = result.stdout
-
-            # qdbus ajoute son propre retour ligne
-            if qdbus_output and text.endswith("\n"):
-                text = text[:-1]
-
-            if text:
-                return text
-
-        except Exception:
-            pass
-
-    return None
-
+    return clipboard.read_text()
 
 
 def clipboard_file_paths():
-    text = read_clipboard_live()
-
-    if not text:
-        return []
-
-    tokens = text.split()
-
-    if not tokens:
-        return []
-
-    if not all(
-        token.startswith("file://")
-        for token in tokens
-    ):
-        return []
-
-    paths = []
-
-    for token in tokens:
-        try:
-            parsed = urlparse(token)
-
-            if parsed.scheme != "file":
-                return []
-
-            path = Path(
-                unquote(parsed.path)
-            )
-
-            if not path.is_file():
-                return []
-
-            paths.append(path)
-
-        except Exception:
-            return []
-
-    return paths
+    return clipboard.file_paths()
 
 
 def clipboard_export_type():
@@ -674,7 +578,7 @@ def cleanup_clipboard_sessions():
 def create_clipboard_session():
     cleanup_clipboard_sessions()
 
-    paths = clipboard_file_paths()
+    paths = clipboard_file_paths()[:100]
     bitmap = None
     if not paths:
         mime = image_mime()
@@ -701,6 +605,9 @@ def create_clipboard_session():
         })
 
     with _clipboard_sessions_lock:
+        if len(_clipboard_sessions) >= 32:
+            oldest = min(_clipboard_sessions, key=lambda key: _clipboard_sessions[key]["created"])
+            clean_expired(_clipboard_sessions.pop(oldest)["items"])
         _clipboard_sessions[session_id] = {
             "created": time.time(),
             "items": snapshot,
@@ -737,35 +644,36 @@ def record_outbound_activity(
     paths=None,
     url=None,
 ):
-    # Réutilise la mécanique existante pour date/type/nom/taille.
-    record_simple_event(
-        event_type,
-        name,
-        size,
-        save_history=False,
-    )
+    with _state_lock:
+        # Réutilise la mécanique existante pour date/type/nom/taille.
+        record_simple_event(
+            event_type,
+            name,
+            size,
+            save_history=False,
+        )
 
-    state = read_state()
+        state = read_state()
 
-    state["last_direction"] = "out"
-    state["batch_type"] = event_type
-    state["batch_count"] = count
-    state["batch_bytes"] = size
-    state["batch_names"] = (
-        list(names)
-        if names
-        else [name]
-    )
+        state["last_direction"] = "out"
+        state["batch_type"] = event_type
+        state["batch_count"] = count
+        state["batch_bytes"] = size
+        state["batch_names"] = (
+            list(names)
+            if names
+            else [name]
+        )
 
-    write_state(state)
-    history.record("out", event_type, name, size, paths=paths, url=url)
+        write_state(state)
+        history.record("out", event_type, name, size, paths=paths, url=url)
 
-    logging.info(
-        "Envoyé vers iPhone : %s (%d octets, %d élément(s))",
-        name,
-        size,
-        count
-    )
+        logging.info(
+            "Envoyé vers iPhone : %s (%d octets, %d élément(s))",
+            name,
+            size,
+            count
+        )
 
 
 def mark_clipboard_session_item_delivered(
@@ -832,6 +740,8 @@ def mark_clipboard_session_item_delivered(
 
 
 def notify(message):
+    if not clipboard.graphical():
+        return
     if not config_value("notifications", True):
         return
 
@@ -901,6 +811,8 @@ def schedule_image_open(path):
 
 
 def open_local_file(path, opener="default"):
+    if not clipboard.graphical():
+        return False
     opener = (opener or "default").strip()
 
     if opener.startswith("desktop:"):
@@ -990,7 +902,7 @@ def safe_filename(name):
     name = unquote(name or "").strip()
     name = Path(name).name
     name = re.sub(r'[\x00-\x1f/\\:*?"<>|]', "_", name)
-    return name[:180]
+    return name[:180] if name not in (".", "..") else ""
 
 
 def unique_path(directory, filename):
@@ -1021,16 +933,16 @@ def sniff_type(raw, content_type):
     if raw.startswith(b"%PDF-"):
         return "application/pdf"
 
-    if raw.startswith(b"\\xff\\xd8\\xff"):
+    if raw.startswith(b"\xff\xd8\xff"):
         return "image/jpeg"
 
-    if raw.startswith(b"\\x89PNG\\r\\n\\x1a\\n"):
+    if raw.startswith(b"\x89PNG\r\n\x1a\n"):
         return "image/png"
 
     if raw.startswith((b"GIF87a", b"GIF89a")):
         return "image/gif"
 
-    if raw.startswith(b"PK\\x03\\x04"):
+    if raw.startswith(b"PK\x03\x04"):
         return "application/zip"
 
     # HEIC / HEIF : boîte ISO BMFF contenant ftyp
@@ -1065,124 +977,30 @@ def generated_filename(content_type):
     return f"iPhone-{stamp}{ext}"
 
 
-def save_upload(raw, content_type, requested_name=None):
-    directory = download_dir()
-    directory.mkdir(parents=True, exist_ok=True)
-
-    filename = safe_filename(requested_name)
-
-    if not filename:
-        filename = generated_filename(content_type)
-
-    # Si iOS fournit un nom sans extension, on complète grâce au MIME.
-    elif not Path(filename).suffix:
-        generated = generated_filename(content_type)
-        suffix = Path(generated).suffix
-
-        if suffix and suffix != ".bin":
-            filename += suffix
-
-    path = unique_path(directory, filename)
-    path.write_bytes(raw)
-
-    return path
-
-
 def copy_to_clipboard(text):
-    qdbus = shutil.which("qdbus6") or shutil.which("qdbus")
-
-    if qdbus:
-        try:
-            r = subprocess.run(
-                [
-                    qdbus,
-                    "org.kde.klipper",
-                    "/klipper",
-                    "setClipboardContents",
-                    text,
-                ],
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=3,
-            )
-            if r.returncode == 0:
-                return "klipper"
-        except Exception:
-            pass
-
-    wl_copy = shutil.which("wl-copy")
-
-    if wl_copy:
-        try:
-            r = subprocess.run(
-                [wl_copy],
-                input=text,
-                text=True,
-                stdout=subprocess.DEVNULL,
-                stderr=subprocess.DEVNULL,
-                timeout=3,
-            )
-            if r.returncode == 0:
-                return "wl-copy"
-        except Exception:
-            pass
-
-    return None
+    return clipboard.write_text(text)
 
 
 def open_url(url):
-    browsers = [
-        "google-chrome",
-        "google-chrome-stable",
-        "chromium",
-        "chromium-browser",
-        "xdg-open",
-    ]
-
-    for browser in browsers:
-        path = shutil.which(browser)
-
-        if not path:
-            continue
-
-        if browser in (
-            "google-chrome",
-            "google-chrome-stable",
-            "chromium",
-            "chromium-browser",
-        ):
-            helper = os.path.expanduser(
-                "~/.local/share/mxlink/arm-maximize-chrome.sh"
-            )
-
-            if os.path.exists(helper):
-                try:
-                    subprocess.run(
-                        [helper],
-                        stdout=subprocess.DEVNULL,
-                        stderr=subprocess.DEVNULL,
-                        timeout=2,
-                    )
-                except Exception:
-                    pass
-
-            command = [path, "--new-window", url]
-        else:
-            command = [path, url]
-
-        subprocess.Popen(
-            command,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
-            start_new_session=True,
-        )
-
-        return browser
-
+    if not clipboard.graphical():
+        return clipboard.write_text(url)
+    tool = shutil.which("xdg-open")
+    if tool:
+        subprocess.Popen([tool, url], stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return "xdg-open"
     return None
 
 
-class Handler(BaseHTTPRequestHandler):
+class Handler(SafeHandler):
+    def local_request(self):
+        # Prevent browser-origin requests and DNS rebinding to the loopback API.
+        host = self.headers.get("Host", "")
+        origin = self.headers.get("Origin", "")
+        if host not in ("127.0.0.1:8765", "localhost:8765") or origin not in ("", "file://"):
+            self.send_text(403, "Local API only")
+            return False
+        return True
+
 
     def send_text(self, status, text):
         body = text.encode("utf-8")
@@ -1195,6 +1013,8 @@ class Handler(BaseHTTPRequestHandler):
         self.wfile.write(body)
 
     def do_GET(self):
+        if not self.local_request():
+            return
         parsed = urlparse(self.path)
         path = parsed.path
         query = parse_qs(parsed.query)
@@ -1452,39 +1272,6 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        if self.path == "/open-folder":
-            path = download_dir()
-
-            try:
-                path.mkdir(
-                    parents=True,
-                    exist_ok=True
-                )
-
-                if open_local_file(path):
-                    self.send_text(
-                        200,
-                        "Dossier ouvert"
-                    )
-                else:
-                    self.send_text(
-                        500,
-                        "Impossible d'ouvrir le dossier"
-                    )
-
-            except Exception as exc:
-                logging.exception(
-                    "Erreur ouverture dossier : %s",
-                    exc
-                )
-
-                self.send_text(
-                    500,
-                    "Erreur ouverture dossier"
-                )
-
-            return
-
         if self.path == "/openers":
             cfg = load_config()
 
@@ -1537,135 +1324,74 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(body)
             return
 
-        if self.path == "/status":
-
-            log_path = (
-                Path.home()
-                / ".local/state/mxlink/mxlink.log"
-            )
-
-            result = {
-                "status": "ready",
-                "last_type": None,
-                "last_name": None,
-                "last_time": None
-            }
-
-            try:
-                lines = log_path.read_text(
-                    errors="replace"
-                ).splitlines()
-
-                for line in reversed(lines):
-
-                    m = re.search(
-                        r'^(\d\d:\d\d:\d\d).*Fichier enregistré : (.+?) '
-                        r'\(\d+ octets, ([^)]+)\)',
-                        line
-                    )
-
-                    if m:
-                        result["last_time"] = m.group(1)
-                        result["last_name"] = Path(m.group(2)).name
-
-                        mime = m.group(3)
-
-                        if mime.startswith("image/"):
-                            result["last_type"] = "image"
-                        elif mime == "application/pdf":
-                            result["last_type"] = "pdf"
-                        else:
-                            result["last_type"] = "file"
-
-                        break
-
-                    m = re.search(
-                        r'^(\d\d:\d\d:\d\d).*URL ouverte : (.+)$',
-                        line
-                    )
-
-                    if m:
-                        result["last_time"] = m.group(1)
-                        result["last_name"] = m.group(2)
-                        result["last_type"] = "url"
-                        break
-
-                    m = re.search(
-                        r'^(\d\d:\d\d:\d\d).*Texte',
-                        line
-                    )
-
-                    if m:
-                        result["last_time"] = m.group(1)
-                        result["last_name"] = "Texte copié"
-                        result["last_type"] = "text"
-                        break
-
-            except Exception as e:
-                result["status"] = "ready"
-                result["error"] = str(e)
-
-            body = json.dumps(
-                result,
-                ensure_ascii=False
-            ).encode("utf-8")
-
-            self.send_response(200)
-            self.send_header(
-                "Content-Type",
-                "application/json; charset=utf-8"
-            )
-            self.send_header(
-                "Content-Length",
-                str(len(body))
-            )
-            self.end_headers()
-            self.wfile.write(body)
-            return
-
-        if self.path == "/mxlink-ca.cer":
-            ca = (
-                Path.home()
-                / ".local/share/mxlink/tls/mxlink-ca.crt"
-            )
-
-            if not ca.exists():
-                self.send_text(404, "CA introuvable")
-                return
-
-            body = ca.read_bytes()
-
-            self.send_response(200)
-            self.send_header(
-                "Content-Type",
-                "application/x-x509-ca-cert"
-            )
-            self.send_header(
-                "Content-Disposition",
-                'attachment; filename="MX-Link-CA.cer"'
-            )
-            self.send_header("Content-Length", str(len(body)))
-            self.end_headers()
-            self.wfile.write(body)
-            return
-
         if self.path in ("/", "/health"):
             self.send_text(200, "MX Link OK")
         else:
             self.send_text(404, "Not found")
 
     def do_POST(self):
-        length = int(self.headers.get("Content-Length", 0))
-
-        # Protection grossière contre un envoi aberrant
-        if length > 1024 * 1024 * 500:
-            self.send_text(413, "Fichier trop volumineux")
+        if not self.local_request():
             return
-
-        raw = self.rfile.read(length)
-        source = self.client_address[0]
-
         parsed = urlparse(self.path)
+        length = self.body_length(MAX_UPLOAD if parsed.path == "/upload" else MAX_JSON)
+        if length is None:
+            return
+        source = self.client_address[0]
+        if parsed.path == "/upload":
+            self.receive_upload(length, parsed)
+            return
+        raw = self.rfile.read(length)
+        if len(raw) != length:
+            self.send_text(400, "Incomplete body")
+            return
+        if parsed.path in ("/pairing/start", "/config", "/history/open", "/history/clear", "/open-folder") and self.headers.get("Content-Type", "").split(";", 1)[0] != "application/json":
+            self.send_text(415, "application/json required")
+            return
+        if parsed.path == "/pairing/start":
+            result = grant()
+            qr = shutil.which("qrencode")
+            if qr:
+                data = subprocess.check_output([qr, "-t", "PNG", "-o", "-", result["url"]], timeout=5)
+                result["qr"] = "data:image/png;base64," + base64.b64encode(data).decode()
+            body = json.dumps(result).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(body)))
+            self.end_headers()
+            self.wfile.write(body)
+            return
+        if self.path == "/open-folder":
+            path = download_dir()
+
+            try:
+                path.mkdir(
+                    parents=True,
+                    exist_ok=True
+                )
+
+                if open_local_file(path):
+                    self.send_text(
+                        200,
+                        "Dossier ouvert"
+                    )
+                else:
+                    self.send_text(
+                        500,
+                        "Impossible d'ouvrir le dossier"
+                    )
+
+            except Exception as exc:
+                logging.exception(
+                    "Erreur ouverture dossier : %s",
+                    exc
+                )
+
+                self.send_text(
+                    500,
+                    "Erreur ouverture dossier"
+                )
+
+            return
 
         if parsed.path == "/history/clear":
             history.clear()
@@ -1725,10 +1451,7 @@ class Handler(BaseHTTPRequestHandler):
                 self.end_headers()
                 self.wfile.write(body)
 
-                logging.info(
-                    "Configuration mise à jour : %s",
-                    cfg
-                )
+                logging.info("Configuration mise à jour")
 
             except (ValueError, json.JSONDecodeError) as exc:
                 self.send_text(
@@ -1746,127 +1469,6 @@ class Handler(BaseHTTPRequestHandler):
         )
 
         # ------------------------------------------------------------------
-        # FICHIER / PHOTO
-        # ------------------------------------------------------------------
-
-        if parsed.path == "/upload":
-
-            query = parse_qs(parsed.query)
-
-            requested_name = self.headers.get("X-MX-Filename")
-
-            # iOS Shortcuts peut parfois replier notre en-tête personnalisé
-            # dans la valeur d'un autre en-tête HTTP.
-            if not requested_name:
-                for header_name, header_value in self.headers.items():
-                    value = str(header_value)
-
-                    match = re.search(
-                        r"X-MX-Filename\\s*:\\s*([^\\r\\n]+)",
-                        value,
-                        re.IGNORECASE,
-                    )
-
-                    if match:
-                        requested_name = match.group(1).strip()
-
-                        logging.info(
-                            "Nom récupéré dans %s : %r",
-                            header_name,
-                            requested_name,
-                        )
-                        break
-
-            if not requested_name:
-                requested_name = query.get("name", [None])[0]
-
-            content_type = self.headers.get(
-                "Content-Type",
-                "application/octet-stream"
-            )
-
-            detected_type = sniff_type(raw, content_type)
-
-            if detected_type != content_type:
-                logging.info(
-                    "Type détecté : %s → %s",
-                    content_type,
-                    detected_type,
-                )
-
-            content_type = detected_type
-
-            try:
-                path = save_upload(
-                    raw,
-                    content_type,
-                    requested_name,
-                )
-            except Exception as exc:
-                logging.exception("Erreur réception fichier : %s", exc)
-                self.send_text(500, "Erreur lors de l'enregistrement")
-                return
-
-            logging.info(
-                "Fichier enregistré : %s (%d octets, %s)",
-                path,
-                len(raw),
-                content_type,
-            )
-
-            mime = content_type.lower().split(";", 1)[0].strip()
-            is_image = mime.startswith("image/")
-            is_pdf = mime == "application/pdf" or path.suffix.lower() == ".pdf"
-
-            record_file_event(
-                path,
-                mime,
-                len(raw)
-            )
-
-            if is_image:
-                notify(f"Photo reçue : {path.name}")
-
-                if config_value("open_images", True):
-                    schedule_image_open(path)
-                    logging.info("Photo ajoutée au lot : %s", path)
-                else:
-                    logging.info(
-                        "Ouverture automatique image désactivée : %s",
-                        path
-                    )
-
-            elif is_pdf:
-                notify(f"PDF reçu : {path.name}")
-
-                if config_value("open_pdfs", True):
-                    opener = config_value("pdf_opener", "default")
-
-                    if open_local_file(path, opener):
-                        logging.info(
-                            "Demande d'ouverture PDF envoyée via %s : %s",
-                            opener,
-                            path
-                        )
-                    else:
-                        logging.warning(
-                            "Impossible de demander l'ouverture PDF via %s : %s",
-                            opener,
-                            path
-                        )
-                else:
-                    logging.info(
-                        "Ouverture automatique PDF désactivée : %s",
-                        path
-                    )
-
-            else:
-                notify(f"Fichier reçu : {path.name}")
-
-            self.send_text(200, f"Reçu : {path.name}")
-            return
-
-        # ------------------------------------------------------------------
         # JSON : URL / TEXTE
         # ------------------------------------------------------------------
 
@@ -1877,6 +1479,10 @@ class Handler(BaseHTTPRequestHandler):
             self.send_text(400, "Invalid JSON")
             return
 
+        if not isinstance(data, dict):
+            self.send_text(400, "JSON object required")
+            return
+
         url = data.get("url")
 
         if isinstance(url, str) and url.startswith(("http://", "https://")):
@@ -1884,7 +1490,7 @@ class Handler(BaseHTTPRequestHandler):
             browser = open_url(url)
 
             if browser:
-                logging.info("URL ouverte : %s", url)
+                logging.info("URL reçue")
 
                 record_simple_event(
                     "url",
@@ -1907,11 +1513,7 @@ class Handler(BaseHTTPRequestHandler):
             method = copy_to_clipboard(text)
 
             if method:
-                logging.info(
-                    "Texte copié via %s : %r",
-                    method,
-                    text[:100],
-                )
+                logging.info("Texte copié via %s", method)
 
                 record_simple_event(
                     "text",
@@ -1926,8 +1528,50 @@ class Handler(BaseHTTPRequestHandler):
 
             return
 
-        logging.warning("Message non reconnu : %s", data)
+        logging.warning("Message non reconnu")
         self.send_text(400, "Message MX Link non reconnu")
+
+    def receive_upload(self, length, parsed):
+        directory = download_dir()
+        directory.mkdir(parents=True, exist_ok=True)
+        name = self.headers.get("X-MX-Filename") or parse_qs(parsed.query).get("name", [None])[0]
+        fd, temporary = tempfile.mkstemp(prefix=".mxlink-", dir=directory)
+        try:
+            with os.fdopen(fd, "wb") as out:
+                remaining = length
+                prefix = b""
+                while remaining:
+                    chunk = self.rfile.read(min(65536, remaining))
+                    if not chunk:
+                        self.send_text(400, "Incomplete upload")
+                        return
+                    if not prefix:
+                        prefix = chunk[:512]
+                    out.write(chunk)
+                    remaining -= len(chunk)
+            mime = sniff_type(prefix, self.headers.get("Content-Type", "application/octet-stream"))
+            filename = safe_filename(name) or generated_filename(mime)
+            if not Path(filename).suffix:
+                filename += Path(generated_filename(mime)).suffix
+            while True:
+                path = unique_path(directory, filename)
+                try:
+                    os.link(temporary, path)
+                    break
+                except FileExistsError:
+                    continue
+            record_file_event(path, mime, length)
+            notify("Fichier reçu : " + path.name)
+            if clipboard.graphical():
+                if mime.startswith("image/") and config_value("open_images", True):
+                    schedule_image_open(path)
+                elif mime == "application/pdf" and config_value("open_pdfs", True):
+                    open_local_file(path, config_value("pdf_opener", "default"))
+            self.send_text(200, "Reçu : " + path.name)
+        except (OSError, TimeoutError):
+            self.send_text(500, "Upload failed")
+        finally:
+            Path(temporary).unlink(missing_ok=True)
 
     def log_message(self, format, *args):
         pass
@@ -1938,7 +1582,7 @@ if __name__ == "__main__":
     logging.info("Démarrage")
     logging.info("Écoute sur %s:%s", HOST, PORT)
 
-    server = ThreadingHTTPServer((HOST, PORT), Handler)
+    server = BoundedServer((HOST, PORT), Handler)
 
     try:
         server.serve_forever()

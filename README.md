@@ -1,59 +1,81 @@
-# MX Link
+# MX Link — 0.1.4-alpha
 
-**Share photos, files, text and links between iPhone and KDE Plasma — over your local network.**
+Transfer text, links, images and files between iPhone and Linux on your local network.
+Plasma 6 includes a panel widget. The engine also runs on other Wayland/X11 desktops or
+without a desktop using a CLI. **Alpha release:** test pairing and transfers before relying on it.
 
-**One iOS Shortcut. Both ways. No background app. No cloud.**
+## Install
 
-[![MX Link overview](mx-link-overview.png)](mx-link-overview.png)
-
-## What it does
-
-**iPhone → KDE**
-- Share photos, PDFs or files from the iOS share sheet. They're saved on KDE; photos and PDFs can open automatically.
-- Share a URL to open it directly in your desktop browser.
-- Share text to copy it to the KDE clipboard.
-
-**KDE → iPhone**
-- Copy text, an image or files on KDE.
-- Run the **MX Link** Shortcut on iPhone and select **Get from MX**.
-
-**iPhone clipboard → KDE**
-- Run the same Shortcut and select **Send to MX** to send clipboard text.
-
-**Every transfer is initiated from the iPhone.** Nothing runs in the background on iOS, and clipboard syncing is not automatic.
-
-## Get started
-
-You'll need KDE Plasma on MX Linux or a Debian-based distribution, an iPhone with Apple Shortcuts, and both devices on the same local network.
-
-Install MX Link on KDE:
+Extract the release archive, enter its directory, then run as your normal user:
 
 ```bash
-git clone https://github.com/Syl6931/mx-link.git
-cd mx-link
+bash install.sh --check
 bash install.sh
 ```
 
-Open the **MX Link** widget in the Plasma panel and select **Pair an iPhone**. Scan its QR code, install the iOS Shortcut, then tap **Pair this iPhone** on the setup page.
+Supported automatic installer: MX Linux/Debian, Python 3.11+, a **systemd user manager**.
+Plasma is optional and detected automatically. For a server use `bash install.sh --headless`;
+this forces headless exchange even if a display environment exists, without installing GUI dependencies.
+Other distributions require manual dependencies and `--skip-deps`; they are not release-tested.
+Wayland clipboard capabilities depend on compositor protocol support.
 
-That's it. On iPhone, use **Share → MX Link** to send something immediately, or launch the **MX Link** Shortcut on its own to choose a clipboard direction.
+The installer uses sudo for dependencies, Avahi and UFW. It does not run as root itself.
+For unattended startup without login, an administrator may explicitly enable lingering with
+`sudo loginctl enable-linger "$USER"`. Systems without a systemd user manager need another
+service integration and are not supported by this installer.
 
-Received files go to **Downloads/MX Link** by default. The Plasma widget shows recent transfers and reception settings.
+## Pair
 
-## Local network access and security
+Use the widget's **Appairer un iPhone**, or `~/.local/bin/mxlink pair`.
+Open its private link/QR on iPhone, install the **MX Link** Shortcut, return to the page,
+choose **Appairer cet iPhone** directly on that same page.
+The grant expires after five minutes and is consumed when tapping the pairing button. Generate a
+new link if it expires; creating one invalidates the previous link. `/setup` alone reveals no token.
 
-MX Link needs **inbound TCP port 8767 on your Linux computer** so the iPhone can reach it. The gateway listens on all network interfaces (`0.0.0.0:8767`); its internal daemon listens only on `127.0.0.1:8765`. No router port forwarding or Internet-facing port is needed — **do not forward TCP 8767 on your router**.
+The existing Shortcut remains compatible. iCloud distributes it and may synchronize
+`Shortcuts/MXLink-config.json`, which contains the shared computer token. **Transfers themselves
+are direct LAN transfers**, not cloud storage. No background iOS app or automatic clipboard sync.
 
-During installation, MX Link adds a UFW firewall allow rule for TCP 8767 **from the local IPv4 subnet detected on the default network interface**. The installer does **not** enable UFW. The rule restricts access only when UFW is active; if you use another firewall, configure it yourself. On machines with multiple network interfaces, check which networks can reach port 8767.
+## Use
 
-**Use MX Link only on a trusted local network.** The `/setup` pairing page can be opened without authentication and includes the pairing token: anyone who can reach that page can obtain the token. Other transfer requests require that token, but traffic uses **unencrypted HTTP**, not HTTPS. Avoid public or untrusted Wi-Fi.
-
-## Uninstall
+Share from iPhone with **Share → MX Link**. To retrieve Linux content, copy text, images or
+files on Linux and run **MX Link → Récupérer depuis MX** on iPhone. **Envoyer vers MX** sends
+iPhone clipboard text. Received files go to Downloads/MX Link. Desktop URLs use the default browser.
+In headless mode, files are saved and text/URLs are retained in private exchange state:
 
 ```bash
-bash uninstall.sh
+printf 'Hello' | ~/.local/bin/mxlink set-text
+~/.local/bin/mxlink get-text
+~/.local/bin/mxlink send-files /path/to/file.pdf
+~/.local/bin/mxlink status
+~/.local/bin/mxlink config
+printf '{"open_images":false}' | ~/.local/bin/mxlink set-config
 ```
 
-To remove pairing settings as well, use `bash uninstall.sh --purge`. Previously received files are kept.
+`send-files` is headless-only. Desktop sessions use their file manager clipboard.
+Current headless text persists until replaced or purged, outside logs/history.
 
-[Lire en français](README.fr.md).
+## Network and security
+
+LAN gateway: **TCP 8767**, all IPv4 interfaces. Local engine: **127.0.0.1:8765**.
+The installer adds a UFW rule for the detected local subnet, but **does not enable UFW**.
+Configure other firewalls yourself. mDNS/Avahi resolves the computer's `.local` name.
+**No router port forwarding or DMZ is required. Do not expose these ports to the Internet.**
+
+**HTTP is unencrypted: trusted LAN only.** Temporary pairing does not prevent interception.
+The gateway allowlist blocks local configuration, history and administration APIs.
+All paired phones currently share one computer token. See [SECURITY.md](SECURITY.md).
+
+## Remove / validate
+
+```bash
+bash uninstall.sh           # keep pairing/configuration
+bash uninstall.sh --purge   # also remove token, state, logs and cache
+python3 -m unittest discover -s tests -v
+sha256sum -c MANIFEST.sha256
+```
+
+Received files and old backups are retained. Tests use isolated homes, fake OS commands for
+installer lifecycle, and real HTTP services on 8765/8767 for integration tests (skipped if occupied).
+A CI workflow is included to run the test suite on GitHub.
+[French clean-install test guide](docs/TEST-CANDIDAT.fr.md) · [Audit mapping](docs/AUDIT-0.1.4.md).
